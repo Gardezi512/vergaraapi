@@ -9,7 +9,7 @@ import { DatabaseModule } from './database/db.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    // DatabaseModule,
+    DatabaseModule,
   ],
   controllers: [AppController],
 
