@@ -1,18 +1,66 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import {
+    Controller,
+    Get,
+    Post,
+    Body,
+    Param,
+    Patch,
+    Delete,
+    ParseIntPipe,
+    UnauthorizedException,
+} from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { UsersService } from './auth.service';
-import { User } from './entities/user.entity';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { JwtService } from '@nestjs/jwt';
+import { LoginUserDto } from './dto/auth-login-dto';
+import { instanceToPlain } from 'class-transformer';
 
-@Controller('users')
+@Controller('docs/auth')
 export class UsersController {
-    constructor(private readonly usersService: UsersService) { }
+    constructor(
+        private readonly usersService: UsersService,
+        private readonly jwtService: JwtService) { }
 
     @Post()
-    create(@Body() user: Partial<User>) {
-        return this.usersService.create(user);
+    async create(@Body() createUserDto: CreateUserDto) {
+        const data = await this.usersService.create(createUserDto);
+        return { status: true, data };
+    }
+    @Post('login')
+    async login(@Body() loginDto: LoginUserDto) {
+        return await this.usersService.login(loginDto);
+    }
+    @Post('/googleLogin')
+    async googleLogin(@Body() loginDto) {
+        let response = await this.usersService.googleLogin(loginDto);
+        return response
+    }
+    @Get()
+    async findAll() {
+        const data = await this.usersService.findAll();
+        return { status: true, data };
     }
 
-    @Get()
-    findAll() {
-        return this.usersService.findAll();
+    @Get(':id')
+    async findOne(@Param('id', ParseIntPipe) id: number) {
+        const data = await this.usersService.findOne(id);
+        return { status: true, data };
+    }
+
+    @Patch(':id')
+    async update(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() updateUserDto: UpdateUserDto,
+    ) {
+        const data = await this.usersService.update(id, updateUserDto);
+        return { status: true, data };
+    }
+
+    @Delete(':id')
+    async remove(@Param('id', ParseIntPipe) id: number) {
+        const data = await this.usersService.remove(id);
+        return { status: true, data };
     }
 }
