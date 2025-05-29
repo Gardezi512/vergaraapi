@@ -1,6 +1,8 @@
 import { Exclude } from 'class-transformer';
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
+export type UserRole = 'creator' | 'Admin';
+
 @Entity()
 export class User {
     @PrimaryGeneratedColumn()
@@ -18,4 +20,8 @@ export class User {
     @Exclude()
     @Column({ nullable: true })
     password?: string;
+
+    @Column({ type: 'enum', enum: ['creator', 'Admin'], default: 'creator' })
+    role: UserRole;
+
 }

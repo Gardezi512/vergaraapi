@@ -38,7 +38,7 @@ export class UsersService {
             throw new UnauthorizedException('Invalid credentials');
         }
 
-        const payload = { email: user.email, sub: user.id };
+        const payload = { id: user.id, email: user.email, role: user.role };
         const token = this.jwtService.sign(payload);
 
         // Extract user data excluding password
@@ -63,7 +63,7 @@ export class UsersService {
             throw new UnauthorizedException('Invalid NextAuth token');
         }
 
-        const { email, name, sub } = decoded;
+        const { email, name, id } = decoded;
         if (!email || !name) throw new UnauthorizedException('Invalid payload');
 
         let user = await this.usersRepo.findOne({ where: { email } });
@@ -76,7 +76,7 @@ export class UsersService {
             user = await this.usersRepo.save(user);
         }
 
-        const payload = { email: user.email, sub: user.id };
+        const payload = { email: user.email, id: user.id, role: user.role };
         const accessToken = this.jwtService.sign(payload);
 
         const { password: _, ...userWithoutPassword } = user;

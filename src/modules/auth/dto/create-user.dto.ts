@@ -1,5 +1,5 @@
 import { Expose } from 'class-transformer';
-import { IsEmail, IsOptional, IsString, IsNotEmpty } from 'class-validator';
+import { IsEmail, IsOptional, IsString, IsNotEmpty, IsIn } from 'class-validator';
 
 export class CreateUserDto {
     @IsNotEmpty()
@@ -18,4 +18,9 @@ export class CreateUserDto {
     @IsString()
     @Expose()
     password?: string;
+
+    @IsOptional()
+    @IsIn(['creator', 'Admin'])
+    role?: 'creator' | 'Admin';
+
 }
