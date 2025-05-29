@@ -53,8 +53,18 @@ export class UsersService {
         };
     }
 
-    async googleLogin(loginDto: { email: string; name: string }) {
-        const { email, name } = loginDto;
+    async loginOrCreateWithNextAuth(token: string) {
+        let decoded: any;
+        try {
+            // decoded = verify(token, process.env.NEXTAUTH_SECRET!);
+            decoded = await this.jwtService.verify(token, { secret: process.env.NEXTAUTH_SECRET! });
+
+        } catch (err) {
+            throw new UnauthorizedException('Invalid NextAuth token');
+        }
+
+        const { email, name, sub } = decoded;
+        if (!email || !name) throw new UnauthorizedException('Invalid payload');
 
         let user = await this.usersRepo.findOne({ where: { email } });
 
@@ -62,24 +72,25 @@ export class UsersService {
             user = this.usersRepo.create({
                 email,
                 name,
-                username: '',
             });
             user = await this.usersRepo.save(user);
         }
 
         const payload = { email: user.email, sub: user.id };
-        const token = this.jwtService.sign(payload);
+        const accessToken = this.jwtService.sign(payload);
 
-        const userWithoutPassword = instanceToPlain(user);
+        const { password: _, ...userWithoutPassword } = user;
 
         return {
             status: true,
             data: {
                 ...userWithoutPassword,
-                accessToken: token,
+                accessToken,
             },
         };
     }
+
+
     async findByEmail(email: string): Promise<User | null> {
         return this.usersRepo.findOne({ where: { email } });
     }

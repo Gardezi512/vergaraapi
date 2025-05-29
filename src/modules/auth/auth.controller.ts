@@ -32,11 +32,12 @@ export class UsersController {
     async login(@Body() loginDto: LoginUserDto) {
         return await this.usersService.login(loginDto);
     }
-    @Post('/googleLogin')
-    async googleLogin(@Body() loginDto) {
-        let response = await this.usersService.googleLogin(loginDto);
-        return response
+    @Post('googleLogin')
+    async googleLogin(@Body('token') token: string) {
+        if (!token) throw new UnauthorizedException('Missing token');
+        return this.usersService.loginOrCreateWithNextAuth(token);
     }
+
     @Get()
     async findAll() {
         const data = await this.usersService.findAll();
