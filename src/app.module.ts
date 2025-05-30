@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { DatabaseModule } from './database/db.module';
 import { UsersModule } from './modules/auth/auth.module';
 import { CommunityModule } from './modules/community/community.module';
+import { TournamentModule } from './modules/tournament/tournament.module';
 
 @Module({
   imports: [
@@ -13,7 +14,8 @@ import { CommunityModule } from './modules/community/community.module';
     }),
     DatabaseModule,
     UsersModule,
-    CommunityModule
+    CommunityModule,
+    TournamentModule
   ],
   controllers: [AppController],
 
