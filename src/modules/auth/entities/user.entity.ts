@@ -1,5 +1,11 @@
 import { Exclude } from 'class-transformer';
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    CreateDateColumn,
+    UpdateDateColumn,
+} from 'typeorm';
 
 export type UserRole = 'creator' | 'Admin';
 
@@ -24,4 +30,9 @@ export class User {
     @Column({ type: 'enum', enum: ['creator', 'Admin'], default: 'creator' })
     role: UserRole;
 
+    @CreateDateColumn()
+    createdAt: Date;
+
+    @UpdateDateColumn()
+    updatedAt: Date;
 }
