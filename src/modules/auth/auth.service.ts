@@ -130,14 +130,18 @@ export class UsersService {
 
         let user = await this.usersRepo.findOne({ where: { email } });
 
-        try {
-            user = this.usersRepo.create({ email, name });
-            await this.usersRepo.save(user);
-            console.log('Saved user ID:', user.id); 
-
-        } catch (err) {
-            console.error('[DB ERROR]', err); 
-            throw new InternalServerErrorException('Failed to save user');
+        // If user doesn't exist, create it
+        if (!user) {
+            try {
+                user = this.usersRepo.create({ email, name });
+                await this.usersRepo.save(user);
+                console.log('New user saved:', user.id);
+            } catch (err) {
+                console.error('[DB ERROR]', err);
+                throw new InternalServerErrorException('Failed to save user');
+            }
+        } else {
+            console.log('Existing user found:', user.id);
         }
 
         const accessToken = this.jwtService.sign({
