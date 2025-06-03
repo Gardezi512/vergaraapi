@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsArray } from 'class-validator';
 
 export class CreateCommunityDto {
     @IsNotEmpty()
@@ -8,4 +8,17 @@ export class CreateCommunityDto {
     @IsOptional()
     @IsString()
     description?: string;
+
+    @IsNotEmpty()
+    @IsString()
+    category: string;
+
+    @IsOptional()
+    @IsString()
+    profilePic?: string;
+
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    adminSpecialties: string[];
 }
