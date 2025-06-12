@@ -6,6 +6,7 @@ import { Tournament } from './entities/tournament.entity';
 import { Community } from 'src/modules/community/entities/community.entity';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
+import { User } from '../auth/entities/user.entity';
 
 @Injectable()
 export class TournamentService {
@@ -17,7 +18,8 @@ export class TournamentService {
         private readonly communityRepo: Repository<Community>,
     ) { }
 
-    async create(dto: CreateTournamentDto): Promise<Tournament> {
+    // tournament.service.ts
+    async create(dto: CreateTournamentDto, user: User): Promise<Tournament> {
         const community = await this.communityRepo.findOne({ where: { id: dto.communityId } });
         if (!community) throw new NotFoundException('Community not found');
 
@@ -26,11 +28,20 @@ export class TournamentService {
             description: dto.description,
             startDate: dto.startDate,
             endDate: dto.endDate,
+            format: dto.format || '1v1',
+            structure: dto.structure || 'single-elimination',
+            category: dto.category,
+            subcategory: dto.subcategory,
+            accessType: dto.accessType || 'public',
+            accessCriteria: dto.accessCriteria,
+            rewards: dto.rewards,
             community,
+            createdBy: user,
         });
 
         return this.tournamentRepo.save(tournament);
     }
+
 
     async findAll(): Promise<Tournament[]> {
         return this.tournamentRepo.find({ relations: ['community'] });

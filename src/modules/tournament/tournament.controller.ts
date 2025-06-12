@@ -1,4 +1,3 @@
-// src/modules/tournament/tournament.controller.ts
 import {
     Controller,
     Post,
@@ -16,39 +15,44 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
+import { instanceToPlain } from 'class-transformer';
 
-@Controller('tournaments')
+@Controller('docs/tournaments')
 export class TournamentController {
     constructor(private readonly tournamentService: TournamentService) { }
 
+    @Post()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('Admin')
-    @Post()
-    create(@Body() dto: CreateTournamentDto, @Request() req) {
-        return this.tournamentService.create(dto);
+    async create(@Body() dto: CreateTournamentDto, @Request() req) {
+        const tournament = await this.tournamentService.create(dto, req.user);
+        return { status: true, data: instanceToPlain(tournament) };
     }
 
     @Get()
-    findAll() {
-        return this.tournamentService.findAll();
+    async findAll() {
+        const tournaments = await this.tournamentService.findAll();
+        return { status: true, data: instanceToPlain(tournaments) };
     }
 
     @Get(':id')
-    findOne(@Param('id') id: number) {
-        return this.tournamentService.findOne(id);
+    async findOne(@Param('id') id: number) {
+        const tournament = await this.tournamentService.findOne(id);
+        return { status: true, data: instanceToPlain(tournament) };
     }
 
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('Admin')
     @Patch(':id')
-    update(@Param('id') id: number, @Body() dto: UpdateTournamentDto) {
-        return this.tournamentService.update(id, dto);
+    async update(@Param('id') id: number, @Body() dto: UpdateTournamentDto) {
+        const updated = await this.tournamentService.update(id, dto);
+        return { status: true, data: instanceToPlain(updated) };
     }
-
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('Admin')
     @Delete(':id')
-    remove(@Param('id') id: number) {
-        return this.tournamentService.remove(id);
+    async remove(@Param('id') id: number) {
+        await this.tournamentService.remove(id);
+        return { status: true };
     }
 }
