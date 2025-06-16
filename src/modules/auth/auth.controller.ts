@@ -33,10 +33,14 @@ export class UsersController {
         return await this.usersService.login(loginDto);
     }
     @Post('googleLogin')
-    async googleLogin(@Body('token') token: string) {
-        if (!token) throw new UnauthorizedException('Missing token');
-        return this.usersService.loginOrCreateWithNextAuth(token);
+    async googleLogin(@Body() body: { idToken: string; accessToken: string }) {
+        if (!body?.idToken || !body?.accessToken) {
+            throw new UnauthorizedException('Missing Google tokens');
+        }
+
+        return this.usersService.loginOrCreateWithNextAuth(body);
     }
+
 
     @Get()
     async findAll() {

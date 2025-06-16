@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { instanceToPlain } from 'class-transformer';
 import { LoginUserDto } from './dto/auth-login-dto';
 import { OAuth2Client } from 'google-auth-library';
+import axios from 'axios';
 
 @Injectable()
 export class UsersService {
@@ -68,90 +69,97 @@ export class UsersService {
     }
 
 
-    // async loginOrCreateWithNextAuth(token: string) {
-    //     let decoded: any;
-    //     try {
-    //         // decoded = verify(token, process.env.NEXTAUTH_SECRET!);
-    //         decoded = await this.jwtService.verify(token, { secret: process.env.NEXTAUTH_SECRET! });
+    async fetchYouTubeChannelData(accessToken: string) {
+        console.log('[YouTube] Fetching channel data with access token...');
 
-    //     } catch (err) {
-    //         throw new UnauthorizedException('Invalid NextAuth token');
-    //     }
+        try {
+            const res = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                },
+                params: {
+                    part: 'snippet,statistics',
+                    mine: true,
+                },
+            });
 
-    //     const { email, name, id } = decoded;
-    //     if (!email || !name) throw new UnauthorizedException('Invalid payload');
+            const channel = res.data.items[0];
 
-    //     let user = await this.usersRepo.findOne({ where: { email } });
+            const youtubeInfo = {
+                channelName: channel.snippet.title,
+                subscribers: channel.statistics.subscriberCount,
+                totalViews: channel.statistics.viewCount,
+                thumbnail: channel.snippet.thumbnails?.default?.url,
+            };
 
-    //     if (!user) {
-    //         user = this.usersRepo.create({
-    //             email,
-    //             name,
-    //         });
-    //         user = await this.usersRepo.save(user);
-    //     }
+            console.log('[YouTube] Channel data fetched successfully:', youtubeInfo);
+            return youtubeInfo;
 
-    //     const payload = { email: user.email, id: user.id, role: user.role };
-    //     const accessToken = this.jwtService.sign(payload);
-
-    //     const { password: _, ...userWithoutPassword } = user;
-
-    //     return {
-    //         status: true,
-    //         data: {
-    //             ...userWithoutPassword,
-    //             accessToken,
-    //         },
-    //     };
-    // }
+        } catch (err) {
+            console.error('[YouTube API ERROR]', err?.response?.data || err.message);
+            return null;
+        }
+    }
 
 
-    async loginOrCreateWithNextAuth(googleToken: string) {
+
+    async loginOrCreateWithNextAuth({
+        idToken,
+        accessToken,
+    }: {
+        idToken: string;
+        accessToken: string;
+    }) {
+        console.log('[Google Login] Verifying token...');
+
         const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
         let ticket;
 
         try {
             ticket = await client.verifyIdToken({
-                idToken: googleToken,
+                idToken,
                 audience: process.env.GOOGLE_CLIENT_ID,
             });
         } catch (err) {
+            console.error('[Google Login] Token verification failed:', err.message);
             throw new UnauthorizedException('Invalid Google token');
         }
-        console.log(`Google token verified: ${googleToken}`);
 
         const payload = ticket.getPayload();
         if (!payload || !payload.email || !payload.name) {
+            console.error('[Google Login] Missing email or name in token payload');
             throw new UnauthorizedException('Invalid Google user data');
         }
-        console.log(`Google user data: ${JSON.stringify(payload)}`);
 
         const { email, name } = payload;
+        console.log('[Google Login] User info from token:', { email, name });
 
         let user = await this.usersRepo.findOne({ where: { email } });
 
-        // If user doesn't exist, create it
         if (!user) {
-            try {
-                user = this.usersRepo.create({ email, name });
-                await this.usersRepo.save(user);
-                console.log('New user saved:', user.id);
-            } catch (err) {
-                console.error('[DB ERROR]', err);
-                throw new InternalServerErrorException('Failed to save user');
-            }
+            console.log('[Google Login] No existing user found. Creating new user...');
+            user = this.usersRepo.create({ email, name });
+            await this.usersRepo.save(user);
+            console.log('[Google Login] New user saved:', user);
         } else {
-            console.log('Existing user found:', user.id);
+            console.log('[Google Login] Existing user found:', user);
         }
 
-        const accessToken = this.jwtService.sign({
+        const jwtToken = this.jwtService.sign({
             id: user.id,
             email: user.email,
             role: user.role,
         });
-        console.log(`User logged in or created: ${user.email}`);
-        console.log(`Access Token: ${accessToken}`);
 
+        console.log('[Google Login] JWT access token generated:', jwtToken);
+
+        const youtubeData = await this.fetchYouTubeChannelData(accessToken); // ✅ access token used here
+
+        if (youtubeData) {
+            console.log('[Google Login] YouTube data:', youtubeData);
+        } else {
+            console.log('[Google Login] YouTube data not available or failed to fetch');
+        }
 
         return {
             status: true,
@@ -160,10 +168,14 @@ export class UsersService {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                accessToken,
+                accessToken: jwtToken,
+                youtube: youtubeData,
             },
         };
     }
+
+
+
 
     async findByEmail(email: string): Promise<User | null> {
         return this.usersRepo.findOne({ where: { email } });
@@ -191,4 +203,5 @@ export class UsersService {
         await this.usersRepo.remove(user);
         return { message: `User with ID ${id} deleted successfully` };
     }
+
 }
