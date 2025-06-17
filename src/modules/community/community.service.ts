@@ -6,6 +6,7 @@ import { Community } from './entities/community.entity';
 import { CreateCommunityDto } from './dto/create-community.dto';
 import { User } from 'src/modules/auth/entities/user.entity';
 import { UpdateCommunityDto } from './dto/update-community.dto';
+import { instanceToPlain } from 'class-transformer';
 
 @Injectable()
 export class CommunityService {
@@ -55,4 +56,26 @@ export class CommunityService {
         const community = await this.findOne(id);
         await this.communityRepo.remove(community);
     }
+    async getCommunityWithMemberStats(id: number): Promise<any> {
+        const community = await this.communityRepo.findOne({
+            where: { id },
+            relations: ['admin', 'members'],
+        });
+
+        if (!community) {
+            throw new NotFoundException(`Community with ID ${id} not found`);
+        }
+
+        const totalJoined = community.members?.length || 0;
+        const remainingSlots =
+            community.memberLimit != null ? Math.max(community.memberLimit - totalJoined, 0) : null;
+        const plainCommunity = instanceToPlain(community);
+
+        return {
+            ...plainCommunity,
+            totalJoined,
+            remainingSlots,
+        };
+    }
+
 }

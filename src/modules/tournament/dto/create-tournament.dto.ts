@@ -76,6 +76,10 @@ export class CreateTournamentDto {
     subcategory?: string;
 
     @IsOptional()
+    @IsString()
+    imageUrl?: string;
+
+    @IsOptional()
     @IsEnum(['public', 'invite-only', 'restricted'])
     accessType?: 'public' | 'invite-only' | 'restricted';
 

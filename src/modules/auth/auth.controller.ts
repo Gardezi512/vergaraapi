@@ -9,13 +9,11 @@ import {
     ParseIntPipe,
     UnauthorizedException,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
 import { UsersService } from './auth.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtService } from '@nestjs/jwt';
 import { LoginUserDto } from './dto/auth-login-dto';
-import { instanceToPlain } from 'class-transformer';
 
 @Controller('docs/auth')
 export class UsersController {

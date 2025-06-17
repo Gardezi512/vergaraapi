@@ -48,6 +48,9 @@ export class Tournament {
         highlightUI?: boolean;
     };
 
+    @Column({ nullable: true })
+    imageUrl?: string;
+
     @ManyToOne(() => Community, community => community.tournaments, { onDelete: 'CASCADE' })
     community: Community;
 

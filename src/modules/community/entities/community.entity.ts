@@ -5,6 +5,8 @@ import {
     ManyToOne,
     CreateDateColumn,
     OneToMany,
+    ManyToMany,
+    JoinTable,
 } from 'typeorm';
 import { User } from 'src/modules/auth/entities/user.entity';
 import { Tournament } from 'src/modules/tournament/entities/tournament.entity';
@@ -34,6 +36,13 @@ export class Community {
 
     @OneToMany(() => Tournament, (tournament) => tournament.community)
     tournaments: Tournament[];
+
+    @ManyToMany(() => User, (user) => user.joinedCommunities, { cascade: true })
+    @JoinTable() // this creates the join table 'community_users_user'
+    members: User[];
+
+    @Column({ type: 'int', nullable: true })
+    memberLimit?: number;
 
     @CreateDateColumn()
     createdAt: Date;
