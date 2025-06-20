@@ -35,6 +35,7 @@ export class TournamentService {
             accessType: dto.accessType || 'public',
             accessCriteria: dto.accessCriteria,
             rewards: dto.rewards,
+            imageUrl: dto.imageUrl,
             community,
             createdBy: user,
         });
