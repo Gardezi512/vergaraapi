@@ -6,6 +6,9 @@ import { DatabaseModule } from './database/db.module';
 import { UsersModule } from './modules/auth/auth.module';
 import { CommunityModule } from './modules/community/community.module';
 import { TournamentModule } from './modules/tournament/tournament.module';
+import { ThumbnailModule } from './modules/thumbnail/thumbnail.module';
+import { BattleModule } from './modules/battle/battle.module';
+import { LeaderboardModule } from './modules/leaderboard/leaderboard.module';
 
 @Module({
   imports: [
@@ -15,7 +18,8 @@ import { TournamentModule } from './modules/tournament/tournament.module';
     DatabaseModule,
     UsersModule,
     CommunityModule,
-    TournamentModule
+    TournamentModule,
+    ThumbnailModule, BattleModule, LeaderboardModule,
   ],
   controllers: [AppController],
 

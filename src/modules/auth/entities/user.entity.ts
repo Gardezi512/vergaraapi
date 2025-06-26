@@ -1,5 +1,6 @@
 import { Exclude } from 'class-transformer';
 import { Community } from 'src/modules/community/entities/community.entity';
+import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
 import {
     Entity,
     PrimaryGeneratedColumn,
@@ -7,6 +8,7 @@ import {
     CreateDateColumn,
     UpdateDateColumn,
     ManyToMany,
+    OneToMany,
 } from 'typeorm';
 
 export type UserRole = 'creator' | 'Admin';
@@ -34,6 +36,12 @@ export class User {
 
     @ManyToMany(() => Community, (community) => community.members)
     joinedCommunities: Community[];
+
+    @Column({ default: 0 })
+    arenaPoints: number;
+
+    @OneToMany(() => Thumbnail, (thumbnail) => thumbnail.creator)
+    thumbnails: Thumbnail[];
 
     @CreateDateColumn()
     createdAt: Date;

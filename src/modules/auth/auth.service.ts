@@ -59,6 +59,7 @@ export class UsersService {
                 status: true,
                 data: {
                     ...userWithoutPassword,
+                    arenaPoints: user.arenaPoints,
                     accessToken: token,
                 },
             };
