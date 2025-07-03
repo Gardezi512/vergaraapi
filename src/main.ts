@@ -11,7 +11,8 @@ async function bootstrap() {
       transform: true, // Automatically transform payloads to be objects typed according to their DTO classes
     }),
   );
-  await app.listen(process.env.PORT ?? 5002);
+  const PORT = process.env.PORT ?? 5002;
+  await app.listen(PORT, '0.0.0.0');
   console.log(`Server is running on port ${process.env.PORT}`);
 
 }
