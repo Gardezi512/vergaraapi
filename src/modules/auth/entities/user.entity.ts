@@ -2,50 +2,50 @@ import { Exclude } from 'class-transformer';
 import { Community } from 'src/modules/community/entities/community.entity';
 import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
 import {
-    Entity,
-    PrimaryGeneratedColumn,
-    Column,
-    CreateDateColumn,
-    UpdateDateColumn,
-    ManyToMany,
-    OneToMany,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToMany,
+  OneToMany,
 } from 'typeorm';
 
 export type UserRole = 'creator' | 'Admin';
 
 @Entity()
 export class User {
-    @PrimaryGeneratedColumn()
-    id: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column()
-    name: string;
+  @Column()
+  name: string;
 
-    @Column({ nullable: true })
-    username?: string;
+  @Column({ nullable: true })
+  username?: string;
 
-    @Column({ unique: true })
-    email: string;
+  @Column({ unique: true })
+  email: string;
 
-    @Exclude()
-    @Column({ nullable: true })
-    password?: string;
+  @Exclude()
+  @Column({ nullable: true })
+  password?: string;
 
-    @Column({ type: 'enum', enum: ['creator', 'Admin'], default: 'creator' })
-    role: UserRole;
+  @Column({ type: 'enum', enum: ['creator', 'Admin'], default: 'creator' })
+  role: UserRole;
 
-    @ManyToMany(() => Community, (community) => community.members)
-    joinedCommunities: Community[];
+  @ManyToMany(() => Community, (community) => community.members)
+  joinedCommunities: Community[];
 
-    @Column({ default: 0 })
-    arenaPoints: number;
+  @Column({ default: 0 })
+  arenaPoints: number;
 
-    @OneToMany(() => Thumbnail, (thumbnail) => thumbnail.creator)
-    thumbnails: Thumbnail[];
+  @OneToMany(() => Thumbnail, (thumbnail) => thumbnail.creator)
+  thumbnails: Thumbnail[];
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
 
-    @UpdateDateColumn()
-    updatedAt: Date;
+  @UpdateDateColumn()
+  updatedAt: Date;
 }
