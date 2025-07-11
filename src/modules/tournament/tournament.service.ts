@@ -1,5 +1,9 @@
 // src/modules/tournament/tournament.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Tournament } from './entities/tournament.entity';
@@ -10,58 +14,102 @@ import { User } from '../auth/entities/user.entity';
 
 @Injectable()
 export class TournamentService {
-    constructor(
-        @InjectRepository(Tournament)
-        private readonly tournamentRepo: Repository<Tournament>,
+  constructor(
+    @InjectRepository(Tournament)
+    private readonly tournamentRepo: Repository<Tournament>,
 
-        @InjectRepository(Community)
-        private readonly communityRepo: Repository<Community>,
-    ) { }
+    @InjectRepository(Community)
+    private readonly communityRepo: Repository<Community>,
+  ) {}
 
-    // tournament.service.ts
-    async create(dto: CreateTournamentDto, user: User): Promise<Tournament> {
-        const community = await this.communityRepo.findOne({ where: { id: dto.communityId } });
-        if (!community) throw new NotFoundException('Community not found');
+  // tournament.service.ts
+  async create(dto: CreateTournamentDto, user: User): Promise<Tournament> {
+    const community = await this.communityRepo.findOne({
+      where: { id: dto.communityId },
+    });
+    if (!community) throw new NotFoundException('Community not found');
 
-        const tournament = this.tournamentRepo.create({
-            title: dto.title,
-            description: dto.description,
-            startDate: dto.startDate,
-            endDate: dto.endDate,
-            format: dto.format || '1v1',
-            structure: dto.structure || 'single-elimination',
-            category: dto.category,
-            subcategory: dto.subcategory,
-            accessType: dto.accessType || 'public',
-            accessCriteria: dto.accessCriteria,
-            rewards: dto.rewards,
-            imageUrl: dto.imageUrl,
-            community,
-            createdBy: user,
-        });
+    const tournament = this.tournamentRepo.create({
+      title: dto.title,
+      description: dto.description,
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      format: dto.format || '1v1',
+      structure: dto.structure || 'single-elimination',
+      category: dto.category,
+      subcategory: dto.subcategory,
+      accessType: dto.accessType || 'public',
+      accessCriteria: dto.accessCriteria,
+      rewards: dto.rewards,
+      imageUrl: dto.imageUrl,
+      rounds: dto.rounds,
+      community,
+      createdBy: user,
+    });
 
-        return this.tournamentRepo.save(tournament);
+    return this.tournamentRepo.save(tournament);
+  }
+
+  async findAll(): Promise<Tournament[]> {
+    return this.tournamentRepo.find({ relations: ['community'] });
+  }
+
+  async findOne(id: number): Promise<Tournament> {
+    const tournament = await this.tournamentRepo.findOne({
+      where: { id },
+      relations: ['community'],
+    });
+    if (!tournament) throw new NotFoundException('Tournament not found');
+    return tournament;
+  }
+
+  async update(
+    id: number,
+    dto: UpdateTournamentDto,
+    user: User,
+  ): Promise<Tournament> {
+    const tournament = await this.findOne(id);
+
+    const isOwner = tournament.createdBy.id === user.id;
+    const isAdmin = user.role === 'Admin';
+
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException(
+        'You do not have permission to update this tournament.',
+      );
     }
 
+    Object.assign(tournament, {
+      title: dto.title ?? tournament.title,
+      description: dto.description ?? tournament.description,
+      startDate: dto.startDate ?? tournament.startDate,
+      endDate: dto.endDate ?? tournament.endDate,
+      format: dto.format ?? tournament.format,
+      structure: dto.structure ?? tournament.structure,
+      category: dto.category ?? tournament.category,
+      subcategory: dto.subcategory ?? tournament.subcategory,
+      accessType: dto.accessType ?? tournament.accessType,
+      accessCriteria: dto.accessCriteria ?? tournament.accessCriteria,
+      rewards: dto.rewards ?? tournament.rewards,
+      imageUrl: dto.imageUrl ?? tournament.imageUrl,
+      rounds: dto.rounds ?? tournament.rounds,
+    });
 
-    async findAll(): Promise<Tournament[]> {
-        return this.tournamentRepo.find({ relations: ['community'] });
+    return this.tournamentRepo.save(tournament);
+  }
+
+  async remove(id: number, user: User): Promise<void> {
+    const tournament = await this.findOne(id);
+
+    const isOwner = tournament.createdBy.id === user.id;
+    const isAdmin = user.role === 'Admin';
+
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this tournament.',
+      );
     }
 
-    async findOne(id: number): Promise<Tournament> {
-        const tournament = await this.tournamentRepo.findOne({ where: { id }, relations: ['community'] });
-        if (!tournament) throw new NotFoundException('Tournament not found');
-        return tournament;
-    }
-
-    async update(id: number, dto: UpdateTournamentDto): Promise<Tournament> {
-        const tournament = await this.findOne(id);
-        Object.assign(tournament, dto);
-        return this.tournamentRepo.save(tournament);
-    }
-
-    async remove(id: number): Promise<void> {
-        const tournament = await this.findOne(id);
-        await this.tournamentRepo.remove(tournament);
-    }
+    await this.tournamentRepo.remove(tournament);
+  }
 }
