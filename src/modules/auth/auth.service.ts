@@ -118,11 +118,11 @@ export class UsersService {
   async loginOrCreateWithNextAuth({
     idToken,
     accessToken,
-    refreshToken, // ✅ Optional: add this if you receive it
+    refreshToken,
   }: {
     idToken: string;
     accessToken: string;
-    refreshToken?: string; // ✅ Optional
+    refreshToken?: string;
   }) {
     console.log('[Google Login] Verifying token...');
 
@@ -201,7 +201,9 @@ export class UsersService {
         id: user.id,
         name: user.name,
         email: user.email,
+        username: user.username,
         role: user.role,
+        arenaPoints: user.arenaPoints,
         accessToken: jwtToken,
         youtube: youtubeData,
       },
