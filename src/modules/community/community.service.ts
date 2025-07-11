@@ -65,7 +65,9 @@ export class CommunityService {
     return community;
   }
 
-  async findAllForAdmin(status?: 'pending' | 'approved'): Promise<Community[]> {
+  async findAllForAdmin(
+    status?: 'pending' | 'approved' | 'rejected',
+  ): Promise<Community[]> {
     const where = status ? { status } : {};
     return this.communityRepo.find({
       where,

@@ -119,11 +119,13 @@ export class CommunityController {
   @Roles('Admin')
   @Get('/admin/all')
   async getAllForAdmin(@Query('status') status: string) {
-    if (status && !['pending', 'approved'].includes(status)) {
-      throw new BadRequestException('Invalid status filter');
+    if (status && !['pending', 'approved', 'rejected'].includes(status)) {
+      throw new BadRequestException(
+        'Invalid status filter. Must be pending, approved, or rejected.',
+      );
     }
     const communities = await this.communityService.findAllForAdmin(
-      status as 'pending' | 'approved',
+      status as 'pending' | 'approved' | 'rejected',
     );
     return { status: true, data: communities };
   }
