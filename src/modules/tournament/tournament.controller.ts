@@ -60,4 +60,18 @@ export class TournamentController {
     await this.tournamentService.remove(id, req.user);
     return { status: true };
   }
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/join')
+  async joinTournament(
+    @Param('id') id: number,
+    @Request() req,
+    @Body('youtubeAccessToken') youtubeAccessToken: string,
+  ) {
+    const message = await this.tournamentService.joinTournament(
+      id,
+      req.user,
+      youtubeAccessToken,
+    );
+    return { status: true, message };
+  }
 }

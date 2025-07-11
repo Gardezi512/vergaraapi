@@ -1,5 +1,6 @@
 // src/modules/tournament/tournament.service.ts
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -11,6 +12,7 @@ import { Community } from 'src/modules/community/entities/community.entity';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { User } from '../auth/entities/user.entity';
+import { UsersService } from '../auth/auth.service';
 
 @Injectable()
 export class TournamentService {
@@ -20,6 +22,9 @@ export class TournamentService {
 
     @InjectRepository(Community)
     private readonly communityRepo: Repository<Community>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+    private readonly authService: UsersService,
   ) {}
 
   // tournament.service.ts
@@ -111,5 +116,42 @@ export class TournamentService {
     }
 
     await this.tournamentRepo.remove(tournament);
+  }
+  async joinTournament(
+    tournamentId: number,
+    user: User,
+    youtubeAccessToken: string, // required to call YouTube API
+  ): Promise<string> {
+    const tournament = await this.tournamentRepo.findOne({
+      where: { id: tournamentId },
+    });
+    if (!tournament) throw new NotFoundException('Tournament not found');
+
+    const minSubs = tournament.accessCriteria?.minSubscribers;
+
+    if (minSubs) {
+      const youtubeData =
+        await this.authService.fetchYouTubeChannelData(youtubeAccessToken);
+      if (!youtubeData) {
+        throw new BadRequestException(
+          'Unable to fetch YouTube data. Please reconnect your account.',
+        );
+      }
+      const subscribers = parseInt(youtubeData.subscribers, 10);
+      if (isNaN(subscribers)) {
+        throw new BadRequestException(
+          'Could not determine your subscriber count.',
+        );
+      }
+      if (subscribers < minSubs) {
+        throw new BadRequestException(
+          `You need at least ${minSubs} subscribers to join this tournament.`,
+        );
+      }
+    }
+
+    // ✅ Here add the user to your participant list (if you have a join table)
+    // For now, just return success
+    return `You have successfully joined the tournament!`;
   }
 }

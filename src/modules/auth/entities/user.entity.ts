@@ -43,6 +43,18 @@ export class User {
   @OneToMany(() => Thumbnail, (thumbnail) => thumbnail.creator)
   thumbnails: Thumbnail[];
 
+  @Column({ nullable: true })
+  youtubeAccessToken?: string;
+
+  @Column({ nullable: true })
+  youtubeRefreshToken?: string;
+
+  @Column({ nullable: true })
+  youtubeChannelName?: string;
+
+  @Column({ nullable: true })
+  youtubeSubscribers?: number;
+
   @CreateDateColumn()
   createdAt: Date;
 
