@@ -44,21 +44,21 @@ class RewardsDto {
 }
 
 export class UpdateTournamentDto {
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  title: string;
+  title?: string;
 
   @IsOptional()
   @IsString()
   description?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsDateString()
-  startDate: Date;
+  startDate?: Date;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsDateString()
-  endDate: Date;
+  endDate?: Date;
 
   @IsOptional()
   @IsEnum(['1v1', '2v2', 'custom'])
@@ -68,9 +68,9 @@ export class UpdateTournamentDto {
   @IsEnum(['single-elimination', 'bracket', 'leaderboard'])
   structure?: 'single-elimination' | 'bracket' | 'leaderboard';
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  category: string;
+  category?: string;
 
   @IsOptional()
   @IsString()
@@ -89,6 +89,7 @@ export class UpdateTournamentDto {
   @ValidateNested()
   @Type(() => RewardsDto)
   rewards?: RewardsDto;
+
   @IsOptional()
   @IsString()
   imageUrl?: string;
@@ -98,7 +99,7 @@ export class UpdateTournamentDto {
   @IsObject({ each: true })
   rounds?: BattleRoundDto[];
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsInt()
-  communityId: number;
+  communityId?: number;
 }

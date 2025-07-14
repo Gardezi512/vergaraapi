@@ -10,6 +10,7 @@ import {
   IsArray,
   IsBoolean,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -37,7 +38,13 @@ export class BattleRoundDto {
     badges?: string[];
     highlightUI?: boolean;
   };
-  durationDays?: number;
+  @ValidateIf((o) => o.roundEndDate)
+  @IsDateString()
+  roundStartDate: Date;
+
+  @IsDateString()
+  roundEndDate: Date;
+
   requirements?: string;
   numParticipants?: number;
   possibleBadges?: string[];

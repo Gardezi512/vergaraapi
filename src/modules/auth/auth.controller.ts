@@ -39,7 +39,6 @@ export class UsersController {
         return this.usersService.loginOrCreateWithNextAuth(body);
     }
 
-
     @Get()
     async findAll() {
         const data = await this.usersService.findAll();

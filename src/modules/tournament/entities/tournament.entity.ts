@@ -10,7 +10,7 @@ import { Community } from 'src/modules/community/entities/community.entity';
 import { User } from 'src/modules/auth/entities/user.entity';
 
 export interface BattleRound {
-  roundNumber: number; // e.g., 1, 2, 3...
+  roundNumber: number;
   battleName: string;
   description?: string;
   theme?: string;
@@ -20,9 +20,10 @@ export interface BattleRound {
     badges?: string[];
     highlightUI?: boolean;
   };
-  durationDays?: number; // duration of the round
-  requirements?: string; // any special requirements
-  numParticipants?: number; // number of participants in this round
+  roundStartDate: Date;
+  roundEndDate: Date;
+  requirements?: string;
+  numParticipants?: number;
   possibleBadges?: string[];
 }
 
