@@ -91,10 +91,24 @@ export class CommunityService {
     }
   }
 
-  async findAll(): Promise<Community[]> {
-    return this.communityRepo.find({
+  async findAll(): Promise<any[]> {
+    const communities = await this.communityRepo.find({
       where: { status: 'approved' },
-      relations: ['admin'],
+      relations: ['admin', 'members'],
+    });
+
+    return communities.map((community) => {
+      const totalJoined = community.members?.length || 0;
+      const remainingSlots =
+        community.memberLimit != null
+          ? Math.max(community.memberLimit - totalJoined, 0)
+          : null;
+
+      return {
+        ...instanceToPlain(community),
+        totalJoined,
+        remainingSlots,
+      };
     });
   }
 
