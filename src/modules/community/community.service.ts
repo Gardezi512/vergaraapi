@@ -206,4 +206,16 @@ export class CommunityService {
       relations: ['admin'],
     });
   }
+  async findJoinedCommunities(userId: number): Promise<Community[]> {
+    const user = await this.usersRepo.findOne({
+      where: { id: userId },
+      relations: ['joinedCommunities', 'joinedCommunities.admin'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user.joinedCommunities;
+  }
 }

@@ -122,4 +122,12 @@ export class CommunityController {
     );
     return { status: true, data: instanceToPlain(community) };
   }
+  @UseGuards(JwtAuthGuard)
+  @Get('/joined')
+  async getJoinedCommunities(@Request() req) {
+    const communities = await this.communityService.findJoinedCommunities(
+      req.user.id,
+    );
+    return { status: true, data: communities };
+  }
 }
