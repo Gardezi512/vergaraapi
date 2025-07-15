@@ -44,7 +44,14 @@ export class CommunityController {
       data: instanceToPlain(community),
     };
   }
-
+  @UseGuards(JwtAuthGuard)
+  @Get('/joined')
+  async getJoinedCommunities(@Request() req) {
+    const communities = await this.communityService.findJoinedCommunities(
+      req.user.id,
+    );
+    return { status: true, data: communities };
+  }
   @Get()
   async findAll() {
     const communities = await this.communityService.findAll();
@@ -52,7 +59,7 @@ export class CommunityController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: number) {
+  async findOne(@Param('id', ParseIntPipe) id: number) {
     const community =
       await this.communityService.getCommunityWithMemberStats(id);
     return { status: true, data: instanceToPlain(community) };
@@ -61,7 +68,7 @@ export class CommunityController {
   @UseGuards(JwtAuthGuard)
   @Patch(':id')
   async update(
-    @Param('id') id: number,
+    @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateCommunityDto,
     @Request() req,
   ) {
@@ -121,13 +128,5 @@ export class CommunityController {
       req.user,
     );
     return { status: true, data: instanceToPlain(community) };
-  }
-  @UseGuards(JwtAuthGuard)
-  @Get('/joined')
-  async getJoinedCommunities(@Request() req) {
-    const communities = await this.communityService.findJoinedCommunities(
-      req.user.id,
-    );
-    return { status: true, data: communities };
   }
 }
