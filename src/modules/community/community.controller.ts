@@ -79,35 +79,8 @@ export class CommunityController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/join')
   async joinCommunity(@Param('id') id: number, @Request() req) {
-    const user = req.user;
-    const community = await this.communityRepo.findOne({
-      where: { id },
-      relations: ['members'],
-    });
-
-    if (!community) throw new NotFoundException('Community not found');
-
-    const totalJoined = community.members.length;
-    if (community.memberLimit && totalJoined >= community.memberLimit) {
-      throw new BadRequestException('Community has reached its member limit');
-    }
-
-    const fullUser = await this.usersRepo.findOne({
-      where: { id: user.id },
-      relations: ['joinedCommunities'],
-    });
-
-    if (!fullUser) throw new NotFoundException('User not found');
-
-    const alreadyJoined = fullUser.joinedCommunities.some(
-      (c) => c.id === community.id,
-    );
-    if (!alreadyJoined) {
-      fullUser.joinedCommunities.push(community);
-      await this.usersRepo.save(fullUser);
-    }
-
-    return { status: true, message: 'Joined community successfully' };
+    const result = await this.communityService.joinCommunity(id, req.user);
+    return { status: true, ...result };
   }
   @Get('/user/:userId')
   async getByCreator(@Param('userId', ParseIntPipe) userId: number) {

@@ -3,6 +3,7 @@ import {
   Injectable,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -45,6 +46,49 @@ export class CommunityService {
       status,
     });
     return this.communityRepo.save(community);
+  }
+  async joinCommunity(
+    communityId: number,
+    user: User,
+  ): Promise<{ message: string }> {
+    const community = await this.communityRepo.findOne({
+      where: { id: communityId },
+      relations: ['members'],
+    });
+
+    if (!community) {
+      throw new NotFoundException('Community not found');
+    }
+
+    const fullUser = await this.usersRepo.findOne({
+      where: { id: user.id },
+      relations: ['joinedCommunities'],
+    });
+
+    if (!fullUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    const alreadyJoinedIndex = fullUser.joinedCommunities.findIndex(
+      (c) => c.id === community.id,
+    );
+
+    if (alreadyJoinedIndex > -1) {
+      // User is already a member → remove them
+      fullUser.joinedCommunities.splice(alreadyJoinedIndex, 1);
+      await this.usersRepo.save(fullUser);
+      return { message: 'Left the community successfully' };
+    } else {
+      // User is not a member → check limit and add them
+      const totalJoined = community.members.length;
+      if (community.memberLimit && totalJoined >= community.memberLimit) {
+        throw new BadRequestException('Community has reached its member limit');
+      }
+
+      fullUser.joinedCommunities.push(community);
+      await this.usersRepo.save(fullUser);
+      return { message: 'Joined community successfully' };
+    }
   }
 
   async findAll(): Promise<Community[]> {
