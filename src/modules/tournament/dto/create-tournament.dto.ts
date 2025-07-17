@@ -11,6 +11,7 @@ import {
   IsBoolean,
   ValidateNested,
   ValidateIf,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -101,6 +102,14 @@ export class CreateTournamentDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  @IsOptional()
+  @IsDateString()
+  registrationDeadline?: Date;
+
+  @IsOptional()
+  @IsInt()
+  maxParticipants?: number;
 
   @IsOptional()
   @IsEnum(['public', 'invite-only', 'restricted'])

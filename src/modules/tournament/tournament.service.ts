@@ -89,6 +89,8 @@ export class TournamentService {
       rewards: dto.rewards,
       imageUrl: dto.imageUrl,
       rounds: dto.rounds,
+      registrationDeadline: dto.registrationDeadline,
+      maxParticipants: dto.maxParticipants,
       community,
       createdBy: user,
     });
@@ -189,6 +191,9 @@ export class TournamentService {
       rewards: dto.rewards ?? tournament.rewards,
       imageUrl: dto.imageUrl ?? tournament.imageUrl,
       rounds: dto.rounds ?? tournament.rounds,
+      registrationDeadline:
+        dto.registrationDeadline ?? tournament.registrationDeadline,
+      maxParticipants: dto.maxParticipants ?? tournament.maxParticipants,
     });
 
     return this.tournamentRepo.save(tournament);

@@ -49,6 +49,14 @@ export class UpdateTournamentDto {
   title?: string;
 
   @IsOptional()
+  @IsDateString()
+  registrationDeadline?: Date;
+
+  @IsOptional()
+  @IsInt()
+  maxParticipants?: number;
+
+  @IsOptional()
   @IsString()
   description?: string;
 

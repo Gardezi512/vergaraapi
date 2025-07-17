@@ -4,13 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Battle } from './entities/battle.entity';
 import { CreateBattleDto } from './dto/create-battle.dto';
 import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
 import { User } from 'src/modules/auth/entities/user.entity';
 import { Vote } from '../vote/entities/vote.entity';
 import { Tournament } from '../tournament/entities/tournament.entity';
+import { shuffle } from 'lodash';
 
 @Injectable()
 export class BattleService {
@@ -158,5 +159,86 @@ export class BattleService {
     // Update battle
     battle.winner = winnerKey;
     return this.battleRepo.save(battle);
+  }
+
+  async generateRandomBattlesForRound(
+    tournamentId: number,
+    roundNumber: number,
+    createdBy: User,
+  ): Promise<Battle[]> {
+    const tournament = await this.battleRepo.manager
+      .getRepository(Tournament)
+      .findOne({
+        where: { id: tournamentId },
+        relations: ['participants', 'rounds'],
+      });
+
+    if (!tournament) throw new NotFoundException('Tournament not found');
+
+    const round = tournament.rounds?.find((r) => r.roundNumber === roundNumber);
+    if (!round) throw new NotFoundException('Round not found');
+
+    const now = new Date();
+    if (now < new Date(round.roundStartDate)) {
+      throw new BadRequestException('This round has not started yet.');
+    }
+    if (now > new Date(round.roundEndDate)) {
+      throw new BadRequestException('This round has already ended.');
+    }
+
+    const existingBattles = await this.battleRepo.find({
+      where: { tournament: { id: tournamentId }, roundNumber },
+    });
+    if (existingBattles.length > 0) {
+      throw new BadRequestException(
+        `Battles for round #${roundNumber} already exist.`,
+      );
+    }
+
+    // Fetch valid thumbnails of current participants
+    const participantIds = tournament.participants.map((p) => p.id);
+
+    const thumbnails = await this.thumbnailRepo.find({
+      where: {
+        tournament: { id: tournamentId },
+        creator: { id: In(participantIds) },
+      },
+      relations: ['creator'],
+    });
+
+    if (thumbnails.length < 2) {
+      throw new BadRequestException(
+        'Not enough thumbnails submitted to generate battles (minimum 2 required).',
+      );
+    }
+
+    // Shuffle and pair
+    const shuffled = shuffle(thumbnails);
+
+    // If odd, exclude last one
+    if (shuffled.length % 2 !== 0) {
+      const excluded = shuffled.pop();
+      console.warn(
+        `Thumbnail from user ${excluded.creator.id} excluded due to unpaired count.`,
+      );
+    }
+
+    const battlesToCreate: Battle[] = [];
+    for (let i = 0; i < shuffled.length; i += 2) {
+      const thumbnailA = shuffled[i];
+      const thumbnailB = shuffled[i + 1];
+
+      const battle = this.battleRepo.create({
+        thumbnailA,
+        thumbnailB,
+        tournament,
+        roundNumber,
+        createdBy,
+      });
+
+      battlesToCreate.push(battle);
+    }
+
+    return this.battleRepo.save(battlesToCreate);
   }
 }

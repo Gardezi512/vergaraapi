@@ -90,7 +90,12 @@ export class Tournament {
   @JoinTable()
   participants: User[];
 
-  
+  @Column({ nullable: true })
+  registrationDeadline?: Date;
+
+  @Column({ type: 'int', nullable: true })
+  maxParticipants?: number;
+
   @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
   createdBy: User;
 
