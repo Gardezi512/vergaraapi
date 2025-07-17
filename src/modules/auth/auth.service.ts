@@ -281,4 +281,41 @@ export class UsersService {
       throw new UnauthorizedException('Could not refresh access token');
     }
   }
+
+  async getLiveYouTubeStats(user: User): Promise<YouTubeProfile> {
+    const profile = await this.youtubeProfileRepo.findOneOrFail({
+      where: { user: { id: user.id } },
+    });
+
+    if (!profile.accessToken) {
+      throw new UnauthorizedException('No YouTube access token available.');
+    }
+
+    let data = await this.fetchYouTubeChannelData(profile.accessToken);
+
+    if (!data) {
+      if (!profile.refreshToken) {
+        throw new UnauthorizedException(
+          'YouTube access token expired and no refresh token available.',
+        );
+      }
+
+      const newAccessToken = await this.refreshYouTubeAccessToken(
+        profile.refreshToken,
+      );
+      profile.accessToken = newAccessToken;
+
+      data = await this.fetchYouTubeChannelData(newAccessToken);
+    }
+
+    if (data) {
+      profile.channelName = data.channelName;
+      profile.thumbnail = data.thumbnail;
+      profile.subscribers = parseInt(data.subscribers, 10) || 0;
+      profile.totalViews = parseInt(data.totalViews, 10) || 0;
+      await this.youtubeProfileRepo.save(profile);
+    }
+
+    return profile;
+  }
 }
