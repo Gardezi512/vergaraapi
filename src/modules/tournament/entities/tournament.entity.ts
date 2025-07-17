@@ -5,6 +5,8 @@ import {
   ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
+  JoinTable,
+  ManyToMany,
 } from 'typeorm';
 import { Community } from 'src/modules/community/entities/community.entity';
 import { User } from 'src/modules/auth/entities/user.entity';
@@ -84,6 +86,11 @@ export class Tournament {
   @Column('jsonb', { nullable: true })
   rounds?: BattleRound[];
 
+  @ManyToMany(() => User, { cascade: true })
+  @JoinTable()
+  participants: User[];
+
+  
   @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
   createdBy: User;
 

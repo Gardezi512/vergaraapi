@@ -211,15 +211,15 @@ export class TournamentService {
   async joinTournament(
     tournamentId: number,
     user: User,
-    youtubeAccessToken: string, // required to call YouTube API
+    youtubeAccessToken: string,
   ): Promise<string> {
     const tournament = await this.tournamentRepo.findOne({
       where: { id: tournamentId },
+      relations: ['participants'],
     });
     if (!tournament) throw new NotFoundException('Tournament not found');
 
     const minSubs = tournament.accessCriteria?.minSubscribers;
-
     if (minSubs) {
       const youtubeData =
         await this.authService.fetchYouTubeChannelData(youtubeAccessToken);
@@ -241,8 +241,14 @@ export class TournamentService {
       }
     }
 
-    //  Here add the user to your participant list (if you have a join table)
-    // For now, just return success
-    return `You have successfully joined the tournament!`;
+    const alreadyJoined = tournament.participants.some((p) => p.id === user.id);
+    if (alreadyJoined) {
+      return 'You have already joined this tournament!';
+    }
+
+    tournament.participants.push(user);
+    await this.tournamentRepo.save(tournament);
+
+    return 'You have successfully joined the tournament!';
   }
 }

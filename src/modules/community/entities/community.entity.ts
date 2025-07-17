@@ -37,6 +37,7 @@ export class Community {
   @OneToMany(() => Tournament, (tournament) => tournament.community)
   tournaments: Tournament[];
 
+  
   @ManyToMany(() => User, (user) => user.joinedCommunities, { cascade: true })
   @JoinTable() // this creates the join table 'community_users_user'
   members: User[];
