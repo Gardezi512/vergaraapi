@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -151,6 +152,30 @@ export class UsersService {
     const { email, name } = payload;
     console.log('[Google Login] User info from token:', { email, name });
 
+    // First: Try to fetch YouTube data
+    let youtubeData = await this.fetchYouTubeChannelData(accessToken);
+
+    // If token failed and refreshToken available, try to refresh
+    if (!youtubeData && refreshToken) {
+      console.log('[Google Login] Trying token refresh...');
+      try {
+        const newAccessToken =
+          await this.refreshYouTubeAccessToken(refreshToken);
+        youtubeData = await this.fetchYouTubeChannelData(newAccessToken);
+        accessToken = newAccessToken;
+      } catch (e) {
+        console.warn('[Google Login] Token refresh failed');
+      }
+    }
+
+    //  Block if still no channel data
+    if (!youtubeData) {
+      throw new ForbiddenException(
+        'No YouTube channel found for this Google account. Please connect a valid YouTube account.',
+      );
+    }
+
+    // Only now: proceed to save user + YouTubeProfile
     let user = await this.usersRepo.findOne({
       where: { email },
       relations: ['youtubeProfile'],
@@ -167,38 +192,16 @@ export class UsersService {
     if (!profile) {
       profile = this.youtubeProfileRepo.create({
         user,
-        accessToken,
-        refreshToken,
       });
-    } else {
-      profile.accessToken = accessToken;
-      if (refreshToken) profile.refreshToken = refreshToken;
     }
 
-    // Attempt YouTube API call with access token
-    let youtubeData = await this.fetchYouTubeChannelData(accessToken);
+    profile.accessToken = accessToken;
+    if (refreshToken) profile.refreshToken = refreshToken;
 
-    if (!youtubeData && refreshToken) {
-      console.log('[Google Login] Trying token refresh...');
-      try {
-        const newAccessToken =
-          await this.refreshYouTubeAccessToken(refreshToken);
-        profile.accessToken = newAccessToken;
-        youtubeData = await this.fetchYouTubeChannelData(newAccessToken);
-      } catch (e) {
-        console.warn('[Google Login] Token refresh failed');
-      }
-    }
-
-    if (youtubeData) {
-      console.log('[Google Login] YouTube data:', youtubeData);
-      profile.channelName = youtubeData.channelName;
-      profile.thumbnail = youtubeData.thumbnail;
-      profile.subscribers = parseInt(youtubeData.subscribers, 10) || 0;
-      profile.totalViews = parseInt(youtubeData.totalViews, 10) || 0;
-    } else {
-      console.log('[Google Login] YouTube data fetch failed or empty.');
-    }
+    profile.channelName = youtubeData.channelName;
+    profile.thumbnail = youtubeData.thumbnail;
+    profile.subscribers = parseInt(youtubeData.subscribers, 10) || 0;
+    profile.totalViews = parseInt(youtubeData.totalViews, 10) || 0;
 
     await this.youtubeProfileRepo.save(profile);
 
