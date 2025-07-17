@@ -1,6 +1,7 @@
 import { Exclude } from 'class-transformer';
 import { Community } from 'src/modules/community/entities/community.entity';
 import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
+import { YouTubeProfile } from 'src/modules/youtubeprofile/entities/youtube.profile.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -9,6 +10,7 @@ import {
   UpdateDateColumn,
   ManyToMany,
   OneToMany,
+  OneToOne,
 } from 'typeorm';
 
 export type UserRole = 'creator' | 'Admin';
@@ -43,17 +45,8 @@ export class User {
   @OneToMany(() => Thumbnail, (thumbnail) => thumbnail.creator)
   thumbnails: Thumbnail[];
 
-  @Column({ nullable: true })
-  youtubeAccessToken?: string;
-
-  @Column({ nullable: true })
-  youtubeRefreshToken?: string;
-
-  @Column({ nullable: true })
-  youtubeChannelName?: string;
-
-  @Column({ nullable: true })
-  youtubeSubscribers?: number;
+  @OneToOne(() => YouTubeProfile, (profile) => profile.user)
+  youtubeProfile?: YouTubeProfile;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -16,6 +16,7 @@ import { instanceToPlain } from 'class-transformer';
 import { LoginUserDto } from './dto/auth-login-dto';
 import { OAuth2Client } from 'google-auth-library';
 import axios from 'axios';
+import { YouTubeProfile } from '../youtubeprofile/entities/youtube.profile.entity';
 
 @Injectable()
 export class UsersService {
@@ -23,6 +24,8 @@ export class UsersService {
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     private readonly jwtService: JwtService,
+    @InjectRepository(YouTubeProfile)
+    private readonly youtubeProfileRepo: Repository<YouTubeProfile>,
   ) {}
 
   async create(data: CreateUserDto): Promise<User> {
@@ -148,52 +151,62 @@ export class UsersService {
     const { email, name } = payload;
     console.log('[Google Login] User info from token:', { email, name });
 
-    let user = await this.usersRepo.findOne({ where: { email } });
+    let user = await this.usersRepo.findOne({
+      where: { email },
+      relations: ['youtubeProfile'],
+    });
 
     if (!user) {
-      console.log(
-        '[Google Login] No existing user found. Creating new user...',
-      );
-      user = this.usersRepo.create({
-        email,
-        name,
-        youtubeAccessToken: accessToken,
-        youtubeRefreshToken: refreshToken ?? undefined,
+      console.log('[Google Login] Creating new user...');
+      user = this.usersRepo.create({ email, name });
+      await this.usersRepo.save(user);
+    }
+
+    let profile = user.youtubeProfile;
+
+    if (!profile) {
+      profile = this.youtubeProfileRepo.create({
+        user,
+        accessToken,
+        refreshToken,
       });
     } else {
-      console.log('[Google Login] Existing user found:', user);
+      profile.accessToken = accessToken;
+      if (refreshToken) profile.refreshToken = refreshToken;
+    }
 
-      user.youtubeAccessToken = accessToken;
-      if (refreshToken) {
-        user.youtubeRefreshToken = refreshToken;
+    // Attempt YouTube API call with access token
+    let youtubeData = await this.fetchYouTubeChannelData(accessToken);
+
+    if (!youtubeData && refreshToken) {
+      console.log('[Google Login] Trying token refresh...');
+      try {
+        const newAccessToken =
+          await this.refreshYouTubeAccessToken(refreshToken);
+        profile.accessToken = newAccessToken;
+        youtubeData = await this.fetchYouTubeChannelData(newAccessToken);
+      } catch (e) {
+        console.warn('[Google Login] Token refresh failed');
       }
     }
 
-    // Fetch YouTube stats & update
-    const youtubeData = await this.fetchYouTubeChannelData(accessToken);
     if (youtubeData) {
       console.log('[Google Login] YouTube data:', youtubeData);
-      user.youtubeChannelName = youtubeData.channelName;
-      user.youtubeSubscribers = parseInt(youtubeData.subscribers, 10) || 0;
+      profile.channelName = youtubeData.channelName;
+      profile.thumbnail = youtubeData.thumbnail;
+      profile.subscribers = parseInt(youtubeData.subscribers, 10) || 0;
+      profile.totalViews = parseInt(youtubeData.totalViews, 10) || 0;
     } else {
-      console.log(
-        '[Google Login] YouTube data not available or failed to fetch',
-      );
+      console.log('[Google Login] YouTube data fetch failed or empty.');
     }
 
-    await this.usersRepo.save(user);
-    console.log('[Google Login] User saved with YouTube data:', {
-      email: user.email,
-      youtubeSubscribers: user.youtubeSubscribers,
-    });
+    await this.youtubeProfileRepo.save(profile);
 
     const jwtToken = this.jwtService.sign({
       id: user.id,
       email: user.email,
       role: user.role,
     });
-
-    console.log('[Google Login] JWT access token generated:', jwtToken);
 
     return {
       status: true,
@@ -234,5 +247,35 @@ export class UsersService {
     const user = await this.findOne(id);
     await this.usersRepo.remove(user);
     return { message: `User with ID ${id} deleted successfully` };
+  }
+  async refreshYouTubeAccessToken(refreshToken: string): Promise<string> {
+    try {
+      const params = new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID || '',
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      });
+
+      const response = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        params,
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        },
+      );
+
+      const newAccessToken = response.data.access_token;
+      console.log('[YouTube] Access token refreshed successfully.');
+      return newAccessToken;
+    } catch (error) {
+      console.error(
+        '[YouTube] Failed to refresh access token:',
+        error?.response?.data || error.message,
+      );
+      throw new UnauthorizedException('Could not refresh access token');
+    }
   }
 }
