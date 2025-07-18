@@ -99,7 +99,7 @@ export class BattleService {
 
     return { newWinnerElo, newLoserElo };
   }
-  async resolveWinnerFromVotes(battleId: number): Promise<Battle> {
+  async resolveWinnerFromVotes(battleId: number): Promise<any> {
     const battle = await this.battleRepo.findOne({
       where: { id: battleId },
       relations: [
@@ -111,7 +111,6 @@ export class BattleService {
     });
 
     if (!battle) throw new NotFoundException('Battle not found');
-    if (battle.winner) throw new BadRequestException('Battle already resolved');
 
     const votes = await this.voteRepo.find({
       where: { battle: { id: battleId } },
@@ -122,43 +121,74 @@ export class BattleService {
       voteCount[vote.votedFor]++;
     }
 
-    if (voteCount.A === voteCount.B) {
-      throw new BadRequestException('Cannot resolve winner: it’s a tie');
+    let winnerKey = battle.winner;
+
+    // If not resolved, resolve it
+    if (!winnerKey) {
+      if (voteCount.A === voteCount.B) {
+        throw new BadRequestException('Cannot resolve winner: it’s a tie');
+      }
+
+      winnerKey = voteCount.A > voteCount.B ? 'A' : 'B';
+      const winnerThumb =
+        winnerKey === 'A' ? battle.thumbnailA : battle.thumbnailB;
+      const loserThumb =
+        winnerKey === 'A' ? battle.thumbnailB : battle.thumbnailA;
+
+      // Calculate new ELOs
+      const updated = this.calculateElo(
+        winnerThumb.eloRating,
+        loserThumb.eloRating,
+        winnerThumb.battleCount,
+        loserThumb.battleCount,
+      );
+
+      winnerThumb.eloRating = updated.newWinnerElo;
+      loserThumb.eloRating = updated.newLoserElo;
+
+      winnerThumb.battleCount++;
+      loserThumb.battleCount++;
+      winnerThumb.winCount++;
+      loserThumb.lossCount++;
+
+      // Arena Points
+      winnerThumb.creator.arenaPoints += 10;
+      loserThumb.creator.arenaPoints += 5;
+
+      // Save updates
+      await this.thumbnailRepo.save([winnerThumb, loserThumb]);
+      await this.userRepo.save([winnerThumb.creator, loserThumb.creator]);
+
+      // Mark battle as resolved
+      battle.winner = winnerKey;
+      await this.battleRepo.save(battle);
     }
 
-    const winnerKey = voteCount.A > voteCount.B ? 'A' : 'B';
+    // Identify winner & loser from saved battle state
     const winnerThumb =
-      winnerKey === 'A' ? battle.thumbnailA : battle.thumbnailB;
+      battle.winner === 'A' ? battle.thumbnailA : battle.thumbnailB;
     const loserThumb =
-      winnerKey === 'A' ? battle.thumbnailB : battle.thumbnailA;
+      battle.winner === 'A' ? battle.thumbnailB : battle.thumbnailA;
 
-    // Calculate new ELOs
-    const updated = this.calculateElo(
-      winnerThumb.eloRating,
-      loserThumb.eloRating,
-      winnerThumb.battleCount,
-      loserThumb.battleCount,
-    );
-
-    winnerThumb.eloRating = updated.newWinnerElo;
-    loserThumb.eloRating = updated.newLoserElo;
-
-    winnerThumb.battleCount++;
-    loserThumb.battleCount++;
-    winnerThumb.winCount++;
-    loserThumb.lossCount++;
-
-    // Update Arena Points
-    winnerThumb.creator.arenaPoints += 10;
-    loserThumb.creator.arenaPoints += 5;
-
-    // Save everything
-    await this.thumbnailRepo.save([winnerThumb, loserThumb]);
-    await this.userRepo.save([winnerThumb.creator, loserThumb.creator]);
-
-    // Update battle
-    battle.winner = winnerKey;
-    return this.battleRepo.save(battle);
+    return {
+      battleId: battle.id,
+      voteCount,
+      winner: {
+        id: winnerThumb.id,
+        creatorId: winnerThumb.creator.id,
+        username: winnerThumb.creator.username,
+        eloRating: winnerThumb.eloRating,
+        arenaPoints: winnerThumb.creator.arenaPoints,
+      },
+      loser: {
+        id: loserThumb.id,
+        creatorId: loserThumb.creator.id,
+        username: loserThumb.creator.username,
+        eloRating: loserThumb.eloRating,
+        arenaPoints: loserThumb.creator.arenaPoints,
+      },
+      message: `Winner is ${battle.winner === 'A' ? 'Thumbnail A' : 'Thumbnail B'}`,
+    };
   }
 
   async generateRandomBattlesForRound(
@@ -233,6 +263,80 @@ export class BattleService {
         thumbnailB,
         tournament,
         roundNumber,
+        createdBy,
+      });
+
+      battlesToCreate.push(battle);
+    }
+
+    return this.battleRepo.save(battlesToCreate);
+  }
+  async getWinnersOfRound(
+    tournamentId: number,
+    roundNumber: number,
+  ): Promise<Thumbnail[]> {
+    const battles = await this.battleRepo.find({
+      where: {
+        tournament: { id: tournamentId },
+        roundNumber,
+      },
+      relations: ['thumbnailA', 'thumbnailB'],
+    });
+
+    const winners: Thumbnail[] = [];
+
+    for (const battle of battles) {
+      if (!battle.winner) continue;
+      const winner =
+        battle.winner === 'A' ? battle.thumbnailA : battle.thumbnailB;
+      winners.push(winner);
+    }
+
+    return winners;
+  }
+  async generateNextRoundBattles(
+    tournamentId: number,
+    currentRound: number,
+    createdBy: User,
+  ): Promise<Battle[]> {
+    const tournament = await this.battleRepo.manager
+      .getRepository(Tournament)
+      .findOne({
+        where: { id: tournamentId },
+      });
+
+    if (!tournament) throw new NotFoundException('Tournament not found');
+
+    const nextRound = tournament.rounds?.find(
+      (r) => r.roundNumber === currentRound + 1,
+    );
+    if (!nextRound) throw new BadRequestException('Next round not found');
+
+    const winners = await this.getWinnersOfRound(tournamentId, currentRound);
+
+    if (winners.length < 2) {
+      throw new BadRequestException(
+        'Not enough winners to generate next round battles.',
+      );
+    }
+
+    const shuffled = shuffle(winners);
+
+    if (shuffled.length % 2 !== 0) {
+      const excluded = shuffled.pop();
+      console.warn(`Thumbnail ${excluded?.id} excluded due to unpaired count.`);
+    }
+
+    const battlesToCreate: Battle[] = [];
+    for (let i = 0; i < shuffled.length; i += 2) {
+      const thumbnailA = shuffled[i];
+      const thumbnailB = shuffled[i + 1];
+
+      const battle = this.battleRepo.create({
+        thumbnailA,
+        thumbnailB,
+        tournament,
+        roundNumber: currentRound + 1,
         createdBy,
       });
 

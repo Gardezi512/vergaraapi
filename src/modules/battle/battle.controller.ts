@@ -42,4 +42,18 @@ export class BattleController {
       req.user,
     );
   }
+  @Post('generate-next/:tournamentId/round/:currentRound')
+  @UseGuards(JwtAuthGuard)
+  async generateNextRound(
+    @Param('tournamentId', ParseIntPipe) tournamentId: number,
+    @Param('currentRound', ParseIntPipe) currentRound: number,
+    @Request() req: { user: User },
+  ) {
+    const battles = await this.battleService.generateNextRoundBattles(
+      tournamentId,
+      currentRound,
+      req.user,
+    );
+    return { status: true, data: instanceToPlain(battles) };
+  }
 }
