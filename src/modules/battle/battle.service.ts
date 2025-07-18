@@ -111,83 +111,77 @@ export class BattleService {
     });
 
     if (!battle) throw new NotFoundException('Battle not found');
+    if (battle.winnerUser) {
+      throw new BadRequestException('Battle already resolved.');
+    }
 
     const votes = await this.voteRepo.find({
       where: { battle: { id: battleId } },
     });
 
-    const voteCount = { A: 0, B: 0 };
+    const voteCount: Record<number, number> = {};
+
     for (const vote of votes) {
-      voteCount[vote.votedFor]++;
+      const userId = vote.votedFor.id;
+      voteCount[userId] = (voteCount[userId] || 0) + 1;
     }
 
-    let winnerKey = battle.winner;
+    const aVotes = voteCount[battle.thumbnailA.creator.id] || 0;
+    const bVotes = voteCount[battle.thumbnailB.creator.id] || 0;
 
-    // If not resolved, resolve it
-    if (!winnerKey) {
-      if (voteCount.A === voteCount.B) {
-        throw new BadRequestException('Cannot resolve winner: it’s a tie');
-      }
-
-      winnerKey = voteCount.A > voteCount.B ? 'A' : 'B';
-      const winnerThumb =
-        winnerKey === 'A' ? battle.thumbnailA : battle.thumbnailB;
-      const loserThumb =
-        winnerKey === 'A' ? battle.thumbnailB : battle.thumbnailA;
-
-      // Calculate new ELOs
-      const updated = this.calculateElo(
-        winnerThumb.eloRating,
-        loserThumb.eloRating,
-        winnerThumb.battleCount,
-        loserThumb.battleCount,
-      );
-
-      winnerThumb.eloRating = updated.newWinnerElo;
-      loserThumb.eloRating = updated.newLoserElo;
-
-      winnerThumb.battleCount++;
-      loserThumb.battleCount++;
-      winnerThumb.winCount++;
-      loserThumb.lossCount++;
-
-      // Arena Points
-      winnerThumb.creator.arenaPoints += 10;
-      loserThumb.creator.arenaPoints += 5;
-
-      // Save updates
-      await this.thumbnailRepo.save([winnerThumb, loserThumb]);
-      await this.userRepo.save([winnerThumb.creator, loserThumb.creator]);
-
-      // Mark battle as resolved
-      battle.winner = winnerKey;
-      await this.battleRepo.save(battle);
+    if (aVotes === bVotes) {
+      throw new BadRequestException('Cannot resolve winner: it’s a tie');
     }
 
-    // Identify winner & loser from saved battle state
-    const winnerThumb =
-      battle.winner === 'A' ? battle.thumbnailA : battle.thumbnailB;
-    const loserThumb =
-      battle.winner === 'A' ? battle.thumbnailB : battle.thumbnailA;
+    const winnerThumb = aVotes > bVotes ? battle.thumbnailA : battle.thumbnailB;
+    const loserThumb = aVotes > bVotes ? battle.thumbnailB : battle.thumbnailA;
+
+    // Calculate new ELOs
+    const updated = this.calculateElo(
+      winnerThumb.eloRating,
+      loserThumb.eloRating,
+      winnerThumb.battleCount,
+      loserThumb.battleCount,
+    );
+
+    winnerThumb.eloRating = updated.newWinnerElo;
+    loserThumb.eloRating = updated.newLoserElo;
+
+    winnerThumb.battleCount++;
+    loserThumb.battleCount++;
+    winnerThumb.winCount++;
+    loserThumb.lossCount++;
+
+    // Arena Points
+    winnerThumb.creator.arenaPoints += 10;
+    loserThumb.creator.arenaPoints += 5;
+
+    // Save thumbnails and users
+    await this.thumbnailRepo.save([winnerThumb, loserThumb]);
+    await this.userRepo.save([winnerThumb.creator, loserThumb.creator]);
+
+    // Save resolved winner
+    battle.winnerUser = winnerThumb.creator;
+    await this.battleRepo.save(battle);
 
     return {
       battleId: battle.id,
       voteCount,
       winner: {
-        id: winnerThumb.id,
-        creatorId: winnerThumb.creator.id,
+        userId: winnerThumb.creator.id,
         username: winnerThumb.creator.username,
+        thumbnailId: winnerThumb.id,
         eloRating: winnerThumb.eloRating,
         arenaPoints: winnerThumb.creator.arenaPoints,
       },
       loser: {
-        id: loserThumb.id,
-        creatorId: loserThumb.creator.id,
+        userId: loserThumb.creator.id,
         username: loserThumb.creator.username,
+        thumbnailId: loserThumb.id,
         eloRating: loserThumb.eloRating,
         arenaPoints: loserThumb.creator.arenaPoints,
       },
-      message: `Winner is ${battle.winner === 'A' ? 'Thumbnail A' : 'Thumbnail B'}`,
+      message: `Winner is ${winnerThumb.creator.username}`,
     };
   }
 
@@ -274,26 +268,40 @@ export class BattleService {
   async getWinnersOfRound(
     tournamentId: number,
     roundNumber: number,
-  ): Promise<Thumbnail[]> {
+  ): Promise<{ thumbnail: Thumbnail; user: User }[]> {
     const battles = await this.battleRepo.find({
       where: {
         tournament: { id: tournamentId },
         roundNumber,
       },
-      relations: ['thumbnailA', 'thumbnailB'],
+      relations: [
+        'thumbnailA',
+        'thumbnailB',
+        'thumbnailA.creator',
+        'thumbnailB.creator',
+        'winnerUser',
+      ],
     });
 
-    const winners: Thumbnail[] = [];
+    const winners: { thumbnail: Thumbnail; user: User }[] = [];
 
     for (const battle of battles) {
-      if (!battle.winner) continue;
-      const winner =
-        battle.winner === 'A' ? battle.thumbnailA : battle.thumbnailB;
-      winners.push(winner);
+      if (!battle.winnerUser) continue;
+
+      const winningThumb =
+        battle.thumbnailA.creator.id === battle.winnerUser.id
+          ? battle.thumbnailA
+          : battle.thumbnailB;
+
+      winners.push({
+        thumbnail: winningThumb,
+        user: winningThumb.creator,
+      });
     }
 
     return winners;
   }
+
   async generateNextRoundBattles(
     tournamentId: number,
     currentRound: number,

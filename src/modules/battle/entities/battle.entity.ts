@@ -20,8 +20,8 @@ export class Battle {
   @ManyToOne(() => Thumbnail, { eager: true })
   thumbnailB: Thumbnail;
 
-  @Column({ type: 'enum', enum: ['A', 'B'], nullable: true })
-  winner?: 'A' | 'B';
+  @ManyToOne(() => User, { nullable: true, eager: true })
+  winnerUser?: User;
 
   @ManyToOne(() => Tournament, { nullable: false, onDelete: 'CASCADE' })
   tournament: Tournament;
