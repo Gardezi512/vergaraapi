@@ -202,8 +202,8 @@ export class TournamentService {
   async remove(id: number, user: User): Promise<void> {
     const tournament = await this.findOne(id);
 
-    const isOwner = tournament.createdBy.id === user.id;
-    const isAdmin = user.role === 'Admin';
+    const isOwner = tournament.createdBy?.id === user?.id;
+    const isAdmin = user?.role === 'Admin';
 
     if (!isOwner && !isAdmin) {
       throw new ForbiddenException(
