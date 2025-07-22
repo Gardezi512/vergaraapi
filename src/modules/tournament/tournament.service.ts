@@ -86,7 +86,7 @@ export class TournamentService {
       subcategory: dto.subcategory,
       accessType: dto.accessType || 'public',
       accessCriteria: dto.accessCriteria,
-      rewards: dto.rewards,
+      TournamentRewards: dto.TournamentRewards,
       imageUrl: dto.imageUrl,
       rounds: dto.rounds,
       registrationDeadline: dto.registrationDeadline,
@@ -188,7 +188,7 @@ export class TournamentService {
       subcategory: dto.subcategory ?? tournament.subcategory,
       accessType: dto.accessType ?? tournament.accessType,
       accessCriteria: dto.accessCriteria ?? tournament.accessCriteria,
-      rewards: dto.rewards ?? tournament.rewards,
+      TournamentRewards: dto.TournamentRewards ?? tournament.TournamentRewards,
       imageUrl: dto.imageUrl ?? tournament.imageUrl,
       rounds: dto.rounds ?? tournament.rounds,
       registrationDeadline:

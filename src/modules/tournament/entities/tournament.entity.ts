@@ -19,14 +19,13 @@ export interface BattleRound {
   focus?: string;
   rewards?: {
     arenaPoints?: number;
-    badges?: string[];
-    highlightUI?: boolean;
+    possibleBadges?: string[];
+    specialRewards?: string[];
   };
   roundStartDate: Date;
   roundEndDate: Date;
   requirements?: string;
   numParticipants?: number;
-  possibleBadges?: string[];
 }
 
 @Entity()
@@ -68,12 +67,8 @@ export class Tournament {
     minElo?: number;
   };
 
-  @Column('jsonb', { nullable: true })
-  rewards?: {
-    arenaPoints?: number;
-    badges?: string[];
-    highlightUI?: boolean;
-  };
+  @Column('jsonb', { default: () => "'[]'" })
+  TournamentRewards: (string | number)[];
 
   @Column({ nullable: true })
   imageUrl?: string;

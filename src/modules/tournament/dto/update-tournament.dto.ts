@@ -36,7 +36,7 @@ class RewardsDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  badges?: string[];
+  possibleBadges?: string[];
 
   @IsOptional()
   @IsBoolean()
@@ -94,9 +94,8 @@ export class UpdateTournamentDto {
   accessCriteria?: AccessCriteriaDto;
 
   @IsOptional()
-  @ValidateNested()
-  @Type(() => RewardsDto)
-  rewards?: RewardsDto;
+  @IsArray()
+  TournamentRewards?: (string | number)[];
 
   @IsOptional()
   @IsString()

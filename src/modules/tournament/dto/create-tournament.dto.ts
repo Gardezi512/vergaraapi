@@ -36,8 +36,8 @@ export class BattleRoundDto {
   focus?: string;
   rewards?: {
     arenaPoints?: number;
-    badges?: string[];
-    highlightUI?: boolean;
+    possibleBadges?: string[];
+    specialRewards?: string[];
   };
   @ValidateIf((o) => o.roundEndDate)
   @IsDateString()
@@ -48,7 +48,6 @@ export class BattleRoundDto {
 
   requirements?: string;
   numParticipants?: number;
-  possibleBadges?: string[];
 }
 
 class RewardsDto {
@@ -59,7 +58,7 @@ class RewardsDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  badges?: string[];
+  possibleBadges?: string[];
 
   @IsOptional()
   @IsBoolean()
@@ -121,9 +120,8 @@ export class CreateTournamentDto {
   accessCriteria?: AccessCriteriaDto;
 
   @IsOptional()
-  @ValidateNested()
-  @Type(() => RewardsDto)
-  rewards?: RewardsDto;
+  @IsArray()
+  TournamentRewards?: (string | number)[];
 
   @IsOptional()
   @IsArray()
