@@ -99,7 +99,7 @@ export class TournamentService {
   }
 
   async findAll(): Promise<Tournament[]> {
-    return this.tournamentRepo.find({ relations: ['community'] });
+    return this.tournamentRepo.find({ relations: ['community', 'createdBy'] });
   }
 
   async findOne(id: number): Promise<any> {
@@ -151,6 +151,16 @@ export class TournamentService {
         pendingRounds,
       },
     };
+  }
+
+  async getJoinedTournaments(userId: number): Promise<Tournament[]> {
+    return this.tournamentRepo
+      .createQueryBuilder('tournament')
+      .leftJoinAndSelect('tournament.participants', 'participant')
+      .leftJoinAndSelect('tournament.community', 'community')
+      .leftJoinAndSelect('tournament.createdBy', 'createdBy')
+      .where('participant.id = :userId', { userId })
+      .getMany();
   }
 
   async update(
@@ -223,8 +233,17 @@ export class TournamentService {
       relations: ['participants'],
     });
     if (!tournament) throw new NotFoundException('Tournament not found');
+    const now = new Date();
+    if (
+      tournament?.registrationDeadline &&
+      now > new Date(tournament?.registrationDeadline)
+    ) {
+      throw new BadRequestException(
+        'Registration for this tournament has closed.',
+      );
+    }
 
-    const minSubs = tournament.accessCriteria?.minSubscribers;
+    const minSubs = tournament?.accessCriteria?.minSubscribers;
     if (minSubs) {
       const youtubeData =
         await this.authService.fetchYouTubeChannelData(youtubeAccessToken);

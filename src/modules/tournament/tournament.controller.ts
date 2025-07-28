@@ -8,6 +8,7 @@ import {
   Body,
   UseGuards,
   Request,
+  Req,
 } from '@nestjs/common';
 import { TournamentService } from './tournament.service';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
@@ -28,7 +29,14 @@ export class TournamentController {
     const tournament = await this.tournamentService.create(dto, req.user);
     return { status: true, data: tournament };
   }
-
+  @Get('joined')
+  @UseGuards(JwtAuthGuard)
+  async getJoined(@Req() req) {
+    const userId = req.user.id;
+    const tournaments =
+      await this.tournamentService.getJoinedTournaments(userId);
+    return { status: true, data: tournaments };
+  }
   @Get()
   async findAll() {
     const tournaments = await this.tournamentService.findAll();
