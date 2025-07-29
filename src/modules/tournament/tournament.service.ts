@@ -236,18 +236,22 @@ export class TournamentService {
       relations: ['participants'],
     });
     if (!tournament) throw new NotFoundException('Tournament not found');
+
+    // Registration deadline check
     const now = new Date();
     if (
-      tournament?.registrationDeadline &&
-      now > new Date(tournament?.registrationDeadline)
+      tournament.registrationDeadline &&
+      now > new Date(tournament.registrationDeadline)
     ) {
       throw new BadRequestException(
         'Registration for this tournament has closed.',
       );
     }
 
-    const minSubs = tournament?.accessCriteria?.minSubscribers;
-    if (minSubs) {
+    // Access validation
+    if (tournament.accessType === 'restricted') {
+      const criteria = tournament.accessCriteria;
+
       const youtubeData =
         await this.authService.fetchYouTubeChannelData(youtubeAccessToken);
       if (!youtubeData) {
@@ -255,17 +259,32 @@ export class TournamentService {
           'Unable to fetch YouTube data. Please reconnect your account.',
         );
       }
+
       const subscribers = parseInt(youtubeData.subscribers, 10);
-      if (isNaN(subscribers)) {
+      const arenaPoints = user.arenaPoints ?? 0;
+      const elo = user.elo ?? 0;
+
+      if (criteria?.minSubscribers && subscribers < criteria.minSubscribers) {
         throw new BadRequestException(
-          'Could not determine your subscriber count.',
+          `You need at least ${criteria.minSubscribers} subscribers.`,
         );
       }
-      if (subscribers < minSubs) {
+      if (criteria?.minArenaPoints && arenaPoints < criteria.minArenaPoints) {
         throw new BadRequestException(
-          `You need at least ${minSubs} subscribers to join this tournament.`,
+          `You need at least ${criteria.minArenaPoints} arena points.`,
         );
       }
+      if (criteria?.minElo && elo < criteria.minElo) {
+        throw new BadRequestException(
+          `You need at least ${criteria.minElo} ELO rating.`,
+        );
+      }
+    }
+
+    if (tournament.accessType === 'invite-only') {
+      throw new ForbiddenException(
+        'This is an invite-only tournament. You cannot join directly.',
+      );
     }
 
     const alreadyJoined = tournament.participants.some((p) => p.id === user.id);

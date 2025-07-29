@@ -42,6 +42,9 @@ export class User {
   @Column({ default: 0 })
   arenaPoints: number;
 
+  @Column({ default: 1000 })
+  elo: number;
+
   @OneToMany(() => Thumbnail, (thumbnail) => thumbnail.creator)
   thumbnails: Thumbnail[];
 
