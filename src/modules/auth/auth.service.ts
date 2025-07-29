@@ -282,40 +282,39 @@ export class UsersService {
     }
   }
 
-  async getLiveYouTubeStats(user: User): Promise<YouTubeProfile> {
+  async getLiveYouTubeStats(user: User): Promise<any> {
     const profile = await this.youtubeProfileRepo.findOneOrFail({
       where: { user: { id: user.id } },
     });
 
     if (!profile.accessToken) {
-      throw new UnauthorizedException('No YouTube access token available.');
+      throw new UnauthorizedException('Missing access token for YouTube');
     }
 
-    let data = await this.fetchYouTubeChannelData(profile.accessToken);
+    let youtubeData = await this.fetchYouTubeChannelData(profile.accessToken);
 
-    if (!data) {
-      if (!profile.refreshToken) {
-        throw new UnauthorizedException(
-          'YouTube access token expired and no refresh token available.',
-        );
-      }
-
+    // If access token failed, refresh and retry
+    if (!youtubeData && profile.refreshToken) {
       const newAccessToken = await this.refreshYouTubeAccessToken(
         profile.refreshToken,
       );
       profile.accessToken = newAccessToken;
-
-      data = await this.fetchYouTubeChannelData(newAccessToken);
-    }
-
-    if (data) {
-      profile.channelName = data.channelName;
-      profile.thumbnail = data.thumbnail;
-      profile.subscribers = parseInt(data.subscribers, 10) || 0;
-      profile.totalViews = parseInt(data.totalViews, 10) || 0;
       await this.youtubeProfileRepo.save(profile);
+
+      youtubeData = await this.fetchYouTubeChannelData(newAccessToken);
     }
 
-    return profile;
+    if (!youtubeData) {
+      throw new UnauthorizedException('Failed to fetch YouTube data');
+    }
+
+    // Update metrics
+    profile.channelName = youtubeData.channelName;
+    profile.thumbnail = youtubeData.thumbnail;
+    profile.subscribers = parseInt(youtubeData.subscribers, 10) || 0;
+    profile.totalViews = parseInt(youtubeData.totalViews, 10) || 0;
+    await this.youtubeProfileRepo.save(profile);
+
+    return youtubeData;
   }
 }
