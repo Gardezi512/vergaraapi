@@ -105,7 +105,7 @@ export class TournamentService {
   async findOne(id: number): Promise<any> {
     const tournament = await this.tournamentRepo.findOne({
       where: { id },
-      relations: ['community'],
+      relations: ['community', 'participants'],
     });
     if (!tournament) throw new NotFoundException('Tournament not found');
 
@@ -133,7 +133,6 @@ export class TournamentService {
         };
       }) || [];
 
-    // calculate progress summary
     const totalRounds = roundsWithDetails.length;
     const completedRounds = roundsWithDetails.filter(
       (r) => r.status === 'completed',
@@ -141,6 +140,9 @@ export class TournamentService {
     const pendingRounds = roundsWithDetails.filter(
       (r) => r.status === 'upcoming',
     ).length;
+
+    // get participant count
+    const participantCount = tournament.participants.length;
 
     return {
       ...tournament,
@@ -150,6 +152,7 @@ export class TournamentService {
         completedRounds,
         pendingRounds,
       },
+      participantCount,
     };
   }
 
