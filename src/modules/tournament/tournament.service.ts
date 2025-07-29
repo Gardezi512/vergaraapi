@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { BattleRound, Tournament } from './entities/tournament.entity';
 import { Community } from 'src/modules/community/entities/community.entity';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
@@ -15,12 +15,14 @@ import { User } from '../auth/entities/user.entity';
 import { UsersService } from '../auth/auth.service';
 import { differenceInDays } from 'date-fns';
 import { isBefore, isAfter } from 'date-fns';
-
+import { Battle } from '../battle/entities/battle.entity';
 @Injectable()
 export class TournamentService {
   constructor(
     @InjectRepository(Tournament)
     private readonly tournamentRepo: Repository<Tournament>,
+    @InjectRepository(Battle)
+    private readonly battleRepo: Repository<Battle>,
 
     @InjectRepository(Community)
     private readonly communityRepo: Repository<Community>,
@@ -296,5 +298,135 @@ export class TournamentService {
     await this.tournamentRepo.save(tournament);
 
     return 'You have successfully joined the tournament!';
+  }
+
+  // src/modules/tournament/tournament.service.ts
+
+  async getUserDashboard(tournamentId: number, userId: number): Promise<any> {
+    const tournament = await this.tournamentRepo.findOne({
+      where: { id: tournamentId },
+      relations: ['participants', 'createdBy'],
+    });
+    if (!tournament) throw new NotFoundException('Tournament not found');
+
+    const battles = await this.battleRepo.find({
+      where: { tournament: { id: tournamentId } },
+      relations: [
+        'thumbnailA',
+        'thumbnailB',
+        'thumbnailA.creator',
+        'thumbnailB.creator',
+        'winnerUser',
+      ],
+    });
+
+    const userBattles = battles.filter(
+      (b) =>
+        b.thumbnailA.creator.id === userId ||
+        b.thumbnailB.creator.id === userId,
+    );
+
+    let currentBattleInfo: {
+      title: string;
+      description: string;
+      deadline: string | null;
+      opponent: string;
+      status: string;
+    } | null = null;
+
+    const currentBattle = userBattles.find((b) => !b.winnerUser);
+
+    if (currentBattle) {
+      const roundInfo = tournament.rounds?.find(
+        (r) => r.roundNumber === currentBattle.roundNumber,
+      );
+
+      const deadline = roundInfo
+        ? new Date(roundInfo.roundEndDate).toLocaleString()
+        : null;
+
+      currentBattleInfo = {
+        title: `Battle #${currentBattle.roundNumber}`,
+        description: roundInfo?.description || 'Tournament battle in progress',
+        deadline,
+        opponent:
+          currentBattle.thumbnailA.creator.id === userId
+            ? currentBattle.thumbnailB.creator.username ||
+              currentBattle.thumbnailB.creator.name
+            : currentBattle.thumbnailA.creator.username ||
+              currentBattle.thumbnailA.creator.name,
+        status: 'active',
+      };
+    }
+
+    // User stats
+    const wins = userBattles.filter((b) => b.winnerUser?.id === userId).length;
+    const losses = userBattles.filter(
+      (b) =>
+        b.winnerUser &&
+        b.winnerUser.id !== userId &&
+        (b.thumbnailA.creator.id === userId ||
+          b.thumbnailB.creator.id === userId),
+    ).length;
+    const totalBattles = userBattles.length;
+    const winRate =
+      totalBattles > 0 ? Math.round((wins / totalBattles) * 100) : 0;
+
+    const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
+
+    const userStats = {
+      rank: null, // Can be calculated based on ELO if needed
+      wins,
+      losses,
+      winRate,
+      arenaPoints: user.arenaPoints,
+      battlesCompleted: wins + losses,
+      totalBattles,
+    };
+
+    // Leaderboard
+    const participantIds = tournament.participants.map((p) => p.id);
+
+    const leaderboardUsers = await this.userRepo.find({
+      where: { id: In(participantIds) },
+      order: { arenaPoints: 'DESC' },
+      take: 20,
+    });
+
+    const leaderboard = leaderboardUsers.map((u, index) => ({
+      rank: index + 1,
+      username: u.username || u.name,
+      avatar: ':avatar:', // TODO: Replace with actual avatar
+      wins: battles.filter((b) => b.winnerUser?.id === u.id).length,
+      losses: battles.filter(
+        (b) =>
+          b.winnerUser &&
+          b.winnerUser.id !== u.id &&
+          (b.thumbnailA.creator.id === u.id ||
+            b.thumbnailB.creator.id === u.id),
+      ).length,
+      score: u.arenaPoints,
+      isCurrentUser: u.id === userId,
+    }));
+
+    // Upcoming battles
+    const upcomingBattles = userBattles
+      .filter((b) => !b.winnerUser)
+      .map((b) => ({
+        round: b.roundNumber,
+        opponent:
+          b.thumbnailA.creator.id === userId
+            ? b.thumbnailB.creator.username || b.thumbnailB.creator.name
+            : b.thumbnailA.creator.username || b.thumbnailA.creator.name,
+        date: b.createdAt.toDateString(),
+        status: 'active',
+      }));
+
+    return {
+      currentBattle: currentBattleInfo,
+      userStats,
+      leaderboard,
+      upcomingBattles,
+    };
   }
 }

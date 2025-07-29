@@ -49,6 +49,12 @@ export class TournamentController {
     return { status: true, data: instanceToPlain(tournament) };
   }
 
+  @Get(':id/dashboard')
+  @UseGuards(JwtAuthGuard)
+  async getUserTournamentDashboard(@Param('id') id: number, @Req() req) {
+    return this.tournamentService.getUserDashboard(id, req.user.id);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Admin', 'creator')
