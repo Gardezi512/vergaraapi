@@ -16,6 +16,8 @@ import { UsersService } from '../auth/auth.service';
 import { differenceInDays } from 'date-fns';
 import { isBefore, isAfter } from 'date-fns';
 import { Battle } from '../battle/entities/battle.entity';
+import { YouTubeProfile } from '../youtubeprofile/entities/youtube.profile.entity';
+import { Thumbnail } from '../thumbnail/entities/thumbnail.entity';
 @Injectable()
 export class TournamentService {
   constructor(
@@ -26,6 +28,11 @@ export class TournamentService {
 
     @InjectRepository(Community)
     private readonly communityRepo: Repository<Community>,
+    @InjectRepository(YouTubeProfile)
+    private readonly youTubeProfileRepo: Repository<YouTubeProfile>,
+    @InjectRepository(Thumbnail)
+    private readonly thumbnailRepo: Repository<Thumbnail>,
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly authService: UsersService,
@@ -234,28 +241,45 @@ export class TournamentService {
     tournamentId: number,
     user: User,
     youtubeAccessToken: string,
-  ): Promise<string> {
+    thumbnailUrl: string,
+  ): Promise<{ message: string; thumbnail: any }> {
     const tournament = await this.tournamentRepo.findOne({
       where: { id: tournamentId },
       relations: ['participants'],
     });
     if (!tournament) throw new NotFoundException('Tournament not found');
 
-    // Registration deadline check
-    const now = new Date();
+    // 1. Validate thumbnail
+    if (!thumbnailUrl || thumbnailUrl.trim() === '') {
+      throw new BadRequestException('A thumbnail URL is required.');
+    }
+
+    const isYouTubeUrl =
+      /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//.test(thumbnailUrl);
+    const isImageUrl = /\.(jpeg|jpg|gif|png|webp)$/.test(thumbnailUrl);
+
+    if (!isYouTubeUrl && !isImageUrl) {
+      throw new BadRequestException(
+        'Invalid thumbnail URL. Provide a YouTube link or image URL.',
+      );
+    }
+
+    // 2. Access checks
     if (
       tournament.registrationDeadline &&
-      now > new Date(tournament.registrationDeadline)
+      new Date() > new Date(tournament.registrationDeadline)
     ) {
       throw new BadRequestException(
         'Registration for this tournament has closed.',
       );
     }
 
-    // Access validation
+    if (tournament.accessType === 'invite-only') {
+      throw new ForbiddenException('This is an invite-only tournament.');
+    }
+
     if (tournament.accessType === 'restricted') {
       const criteria = tournament.accessCriteria;
-
       const youtubeData =
         await this.authService.fetchYouTubeChannelData(youtubeAccessToken);
       if (!youtubeData) {
@@ -285,24 +309,53 @@ export class TournamentService {
       }
     }
 
-    if (tournament.accessType === 'invite-only') {
-      throw new ForbiddenException(
-        'This is an invite-only tournament. You cannot join directly.',
-      );
-    }
-
     const alreadyJoined = tournament.participants.some((p) => p.id === user.id);
     if (alreadyJoined) {
-      return 'You have already joined this tournament!';
+      return {
+        message: 'You have already joined this tournament!',
+        thumbnail: null,
+      };
     }
 
+    // 3. Save participant
     tournament.participants.push(user);
     await this.tournamentRepo.save(tournament);
 
-    return 'You have successfully joined the tournament!';
+    // 4. Save thumbnail
+    let finalImageUrl: string | undefined;
+
+    if (isImageUrl) {
+      finalImageUrl = thumbnailUrl;
+    } else if (isYouTubeUrl) {
+      const videoId = this.extractYouTubeVideoId(thumbnailUrl);
+      if (!videoId) {
+        throw new BadRequestException('Invalid YouTube URL format.');
+      }
+      finalImageUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+    }
+
+    const newThumbnail = this.thumbnailRepo.create({
+      creator: { id: user.id },
+      tournament: { id: tournament.id },
+      imageUrl: finalImageUrl,
+    });
+
+    const savedThumbnail = await this.thumbnailRepo.save(newThumbnail);
+
+    await this.thumbnailRepo.save(savedThumbnail);
+
+    return {
+      message: 'You have successfully joined the tournament!',
+      thumbnail: savedThumbnail,
+    };
   }
 
-  // src/modules/tournament/tournament.service.ts
+  private extractYouTubeVideoId(url: string): string | null {
+    const match = url.match(
+      /(?:youtube\.com\/.*v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    );
+    return match ? match[1] : null;
+  }
 
   async getUserDashboard(tournamentId: number, userId: number): Promise<any> {
     const tournament = await this.tournamentRepo.findOne({

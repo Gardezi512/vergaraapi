@@ -9,12 +9,16 @@ import { User } from '../auth/entities/user.entity';
 import { UsersModule } from '../auth/auth.module';
 import { BattleModule } from '../battle/battle.module';
 import { Battle } from '../battle/entities/battle.entity';
+import { YouTubeProfile } from '../youtubeprofile/entities/youtube.profile.entity';
+import { Thumbnail } from '../thumbnail/entities/thumbnail.entity';
+import { ThumbnailModule } from '../thumbnail/thumbnail.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tournament, Community, User, Battle]),
+    TypeOrmModule.forFeature([Tournament, Community, User, Battle, YouTubeProfile, Thumbnail]),
     UsersModule,
     BattleModule,
+    ThumbnailModule,
   ],
   providers: [TournamentService],
   controllers: [TournamentController],

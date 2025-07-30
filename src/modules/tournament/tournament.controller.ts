@@ -80,12 +80,18 @@ export class TournamentController {
     @Param('id') id: number,
     @Request() req,
     @Body('youtubeAccessToken') youtubeAccessToken: string,
+    @Body('thumbnailUrl') thumbnailUrl: string,
   ) {
-    const message = await this.tournamentService.joinTournament(
+    const result = await this.tournamentService.joinTournament(
       id,
       req.user,
       youtubeAccessToken,
+      thumbnailUrl,
     );
-    return { status: true, message };
+    return {
+      status: true,
+      message: result.message,
+      thumbnail: result.thumbnail, // appended but original message shape preserved
+    };
   }
 }
