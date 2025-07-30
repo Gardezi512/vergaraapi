@@ -101,7 +101,9 @@ export class TournamentService {
   }
 
   async findAll(): Promise<Tournament[]> {
-    return this.tournamentRepo.find({ relations: ['community', 'createdBy'] });
+    return this.tournamentRepo.find({
+      relations: ['community', 'createdBy', 'participants'],
+    });
   }
 
   async findOne(id: number): Promise<any> {
