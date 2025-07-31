@@ -388,7 +388,6 @@ export class TournamentService {
       opponent: string;
       status: string;
     } | null = null;
-
     const currentBattle = userBattles.find((b) => !b.winnerUser);
 
     if (currentBattle) {
@@ -414,7 +413,6 @@ export class TournamentService {
       };
     }
 
-    // User stats
     const wins = userBattles.filter((b) => b.winnerUser?.id === userId).length;
     const losses = userBattles.filter(
       (b) =>
@@ -430,7 +428,7 @@ export class TournamentService {
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
 
     const userStats = {
-      rank: null, // Can be calculated based on ELO if needed
+      rank: null,
       wins,
       losses,
       winRate,
@@ -439,7 +437,6 @@ export class TournamentService {
       totalBattles,
     };
 
-    // Leaderboard
     const participantIds = tournament.participants.map((p) => p.id);
 
     const leaderboardUsers = await this.userRepo.find({
@@ -451,7 +448,7 @@ export class TournamentService {
     const leaderboard = leaderboardUsers.map((u, index) => ({
       rank: index + 1,
       username: u.username || u.name,
-      avatar: ':avatar:', // TODO: Replace with actual avatar
+      avatar: ':avatar:', // Replace later
       wins: battles.filter((b) => b.winnerUser?.id === u.id).length,
       losses: battles.filter(
         (b) =>
@@ -464,7 +461,6 @@ export class TournamentService {
       isCurrentUser: u.id === userId,
     }));
 
-    // Upcoming battles
     const upcomingBattles = userBattles
       .filter((b) => !b.winnerUser)
       .map((b) => ({
@@ -478,6 +474,9 @@ export class TournamentService {
       }));
 
     return {
+      tournament,
+      rounds: tournament.rounds,
+      battles,
       currentBattle: currentBattleInfo,
       userStats,
       leaderboard,

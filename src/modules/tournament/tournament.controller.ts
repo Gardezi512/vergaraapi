@@ -50,7 +50,7 @@ export class TournamentController {
   }
 
   @Get(':id/dashboard')
-  @UseGuards(JwtAuthGuard)
+  // @UseGuards(JwtAuthGuard)
   async getUserTournamentDashboard(@Param('id') id: number, @Req() req) {
     return this.tournamentService.getUserDashboard(id, req.user.id);
   }
