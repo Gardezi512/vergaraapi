@@ -50,9 +50,14 @@ export class TournamentController {
   }
 
   @Get(':id/dashboard')
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   async getUserTournamentDashboard(@Param('id') id: number, @Req() req) {
-    return this.tournamentService.getUserDashboard(id, req.user.id);
+    const data = await this.tournamentService.getUserDashboard(id, req.user.id);
+    console.log('Dashboard Data:', data);
+    return {
+      status: true,
+      data,
+    };
   }
 
   @Patch(':id')

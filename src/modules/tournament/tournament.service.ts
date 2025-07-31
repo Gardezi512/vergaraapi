@@ -385,32 +385,40 @@ export class TournamentService {
       title: string;
       description: string;
       deadline: string | null;
-      opponent: string;
       status: string;
     } | null = null;
-    const currentBattle = userBattles.find((b) => !b.winnerUser);
 
-    if (currentBattle) {
-      const roundInfo = tournament.rounds?.find(
-        (r) => r.roundNumber === currentBattle.roundNumber,
-      );
+    const activeRound = tournament.rounds?.find(
+      (r: any) => r.status === 'active',
+    );
+    let currentBattle: Battle | null = null;
 
-      const deadline = roundInfo
-        ? new Date(roundInfo.roundEndDate).toLocaleString()
-        : null;
+    if (activeRound) {
+      currentBattle =
+        userBattles.find(
+          (b) => b?.roundNumber === activeRound?.roundNumber && !b.winnerUser,
+        ) ?? null;
 
-      currentBattleInfo = {
-        title: `Battle #${currentBattle.roundNumber}`,
-        description: roundInfo?.description || 'Tournament battle in progress',
-        deadline,
-        opponent:
-          currentBattle.thumbnailA.creator.id === userId
-            ? currentBattle.thumbnailB.creator.username ||
-              currentBattle.thumbnailB.creator.name
-            : currentBattle.thumbnailA.creator.username ||
-              currentBattle.thumbnailA.creator.name,
-        status: 'active',
-      };
+      if (currentBattle) {
+        currentBattleInfo = {
+          title: `Battle #${currentBattle.roundNumber}`,
+          description:
+            activeRound.description ?? 'Tournament battle in progress',
+          deadline: activeRound.roundEndDate
+            ? new Date(activeRound.roundEndDate).toISOString()
+            : null,
+          status: 'active',
+        };
+      } else {
+        currentBattleInfo = {
+          title: activeRound.battleName ?? `Round #${activeRound.roundNumber}`,
+          description: activeRound.description ?? 'Waiting for pairing',
+          deadline: activeRound.roundEndDate
+            ? new Date(activeRound.roundEndDate).toISOString()
+            : null,
+          status: activeRound?.status ?? 'waiting',
+        };
+      }
     }
 
     const wins = userBattles.filter((b) => b.winnerUser?.id === userId).length;
@@ -448,7 +456,7 @@ export class TournamentService {
     const leaderboard = leaderboardUsers.map((u, index) => ({
       rank: index + 1,
       username: u.username || u.name,
-      avatar: ':avatar:', // Replace later
+      avatar: ':avatar:',
       wins: battles.filter((b) => b.winnerUser?.id === u.id).length,
       losses: battles.filter(
         (b) =>
@@ -474,8 +482,36 @@ export class TournamentService {
       }));
 
     return {
-      tournament,
+      id: tournament.id,
+      title: tournament.title,
+      description: tournament.description,
+      startDate: tournament.startDate,
+      endDate: tournament.endDate,
+      format: tournament.format,
+      structure: tournament.structure,
+      category: tournament.category,
+      subcategory: tournament.subcategory,
+      accessType: tournament.accessType,
+      accessCriteria: tournament.accessCriteria,
+      TournamentRewards: tournament.TournamentRewards ?? [],
+      imageUrl: tournament.imageUrl,
+      registrationDeadline: tournament.registrationDeadline,
+      maxParticipants: tournament.maxParticipants,
+      createdAt: tournament.createdAt,
+      updatedAt: tournament.updatedAt,
+      participantCount: tournament.participants?.length ?? 0,
+      community: tournament.community,
       rounds: tournament.rounds,
+      progress: {
+        totalRounds: tournament.rounds?.length ?? 0,
+        completedRounds:
+          tournament.rounds?.filter((r) => r.status === 'completed')?.length ??
+          0,
+        pendingRounds:
+          tournament.rounds?.filter((r) => r.status === 'upcoming')?.length ??
+          0,
+      },
+      participants: tournament.participants,
       battles,
       currentBattle: currentBattleInfo,
       userStats,

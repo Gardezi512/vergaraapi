@@ -16,6 +16,7 @@ export interface BattleRound {
   battleName: string;
   description?: string;
   theme?: string;
+  status?: 'active' | 'upcoming' | 'completed';
   focus?: string;
   rewards?: {
     arenaPoints?: number;
