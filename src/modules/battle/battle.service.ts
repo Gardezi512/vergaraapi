@@ -190,17 +190,24 @@ export class BattleService {
     roundNumber: number,
     createdBy: User,
   ): Promise<Battle[]> {
+   console.log(`🌀 Tournament ID: ${tournamentId}`);
+    console.log(`🏁 Generating battles for round: ${roundNumber}`);
+
     const tournament = await this.battleRepo.manager
       .getRepository(Tournament)
       .findOne({
         where: { id: tournamentId },
-        relations: ['participants', 'rounds'],
+        relations: ['participants'],
       });
 
     if (!tournament) throw new NotFoundException('Tournament not found');
 
-    const round = tournament.rounds?.find((r) => r.roundNumber === roundNumber);
-    if (!round) throw new NotFoundException('Round not found');
+   console.log(`📦 Rounds from tournament: ${JSON.stringify(tournament.rounds)}`);
+
+    const round = tournament.rounds?.find(r => r.roundNumber === roundNumber);
+    if (!round) throw new NotFoundException(`Round #${roundNumber} not found`);
+
+    console.log(`✅ Active Round Info: ${JSON.stringify(round)}`);
 
     const now = new Date();
     if (now < new Date(round.roundStartDate)) {
@@ -214,9 +221,7 @@ export class BattleService {
       where: { tournament: { id: tournamentId }, roundNumber },
     });
     if (existingBattles.length > 0) {
-      throw new BadRequestException(
-        `Battles for round #${roundNumber} already exist.`,
-      );
+      throw new BadRequestException(`Battles for round #${roundNumber} already exist.`);
     }
 
     // Fetch valid thumbnails of current participants
@@ -230,20 +235,20 @@ export class BattleService {
       relations: ['creator'],
     });
 
+    console.log(`🎯 Found ${thumbnails.length} thumbnails for round pairing.`);
+
     if (thumbnails.length < 2) {
       throw new BadRequestException(
         'Not enough thumbnails submitted to generate battles (minimum 2 required).',
       );
     }
 
-    // Shuffle and pair
     const shuffled = shuffle(thumbnails);
 
-    // If odd, exclude last one
     if (shuffled.length % 2 !== 0) {
       const excluded = shuffled.pop();
-      console.warn(
-        `Thumbnail from user ${excluded.creator.id} excluded due to unpaired count.`,
+     console.log(
+        `⚠️ Thumbnail from user ${excluded.creator.id} excluded due to unpaired count.`,
       );
     }
 
@@ -251,6 +256,10 @@ export class BattleService {
     for (let i = 0; i < shuffled.length; i += 2) {
       const thumbnailA = shuffled[i];
       const thumbnailB = shuffled[i + 1];
+
+      console.log(
+        `📊 Pairing battle: ${thumbnailA.creator.username} vs ${thumbnailB.creator.username}`,
+      );
 
       const battle = this.battleRepo.create({
         thumbnailA,
@@ -263,8 +272,11 @@ export class BattleService {
       battlesToCreate.push(battle);
     }
 
+    console.log(`💾 Saving ${battlesToCreate.length} battles to DB...`);
+
     return this.battleRepo.save(battlesToCreate);
   }
+
   async getWinnersOfRound(
     tournamentId: number,
     roundNumber: number,
