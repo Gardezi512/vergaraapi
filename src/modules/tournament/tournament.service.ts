@@ -363,7 +363,7 @@ export class TournamentService {
       relations: ['participants', 'createdBy'],
     });
     if (!tournament) throw new NotFoundException('Tournament not found');
-
+  
     const battles = await this.battleRepo.find({
       where: { tournament: { id: tournamentId } },
       relations: [
@@ -374,53 +374,70 @@ export class TournamentService {
         'winnerUser',
       ],
     });
-
+  
     const userBattles = battles.filter(
       (b) =>
         b.thumbnailA.creator.id === userId ||
         b.thumbnailB.creator.id === userId,
     );
-
+  
+    // ✅ Dynamically determine active round based on current time
+    const now = new Date();
+    const activeRound = tournament.rounds?.find((r: any) => {
+      const start = new Date(r.roundStartDate);
+      const end = new Date(r.roundEndDate);
+      return now >= start && now <= end;
+    });
+  
+    console.log('✅ Active Round:', activeRound?.roundNumber, activeRound?.battleName);
+  
     let currentBattleInfo: {
       title: string;
       description: string;
       deadline: string | null;
       status: string;
+      opponent?: string;
     } | null = null;
-
-    const activeRound = tournament.rounds?.find(
-      (r: any) => r.status === 'active',
-    );
+  
     let currentBattle: Battle | null = null;
-
+  
     if (activeRound) {
       currentBattle =
         userBattles.find(
           (b) => b?.roundNumber === activeRound?.roundNumber && !b.winnerUser,
         ) ?? null;
-
+  
       if (currentBattle) {
+        const opponent =
+          currentBattle.thumbnailA.creator.id === userId
+            ? currentBattle.thumbnailB.creator.username || currentBattle.thumbnailB.creator.name
+            : currentBattle.thumbnailA.creator.username || currentBattle.thumbnailA.creator.name;
+  
+        console.log('🎯 Current Battle Found:', currentBattle.id, 'vs', opponent);
+  
         currentBattleInfo = {
           title: `Battle #${currentBattle.roundNumber}`,
-          description:
-            activeRound.description ?? 'Tournament battle in progress',
+          description: activeRound.description ?? 'Tournament battle in progress',
           deadline: activeRound.roundEndDate
             ? new Date(activeRound.roundEndDate).toISOString()
             : null,
           status: 'active',
+          opponent,
         };
       } else {
+        console.log('⚠️ No active battle found for user in round', activeRound.roundNumber);
+  
         currentBattleInfo = {
           title: activeRound.battleName ?? `Round #${activeRound.roundNumber}`,
           description: activeRound.description ?? 'Waiting for pairing',
           deadline: activeRound.roundEndDate
             ? new Date(activeRound.roundEndDate).toISOString()
             : null,
-          status: activeRound?.status ?? 'waiting',
+          status: 'active',
         };
       }
     }
-
+  
     const wins = userBattles.filter((b) => b.winnerUser?.id === userId).length;
     const losses = userBattles.filter(
       (b) =>
@@ -430,11 +447,10 @@ export class TournamentService {
           b.thumbnailB.creator.id === userId),
     ).length;
     const totalBattles = userBattles.length;
-    const winRate =
-      totalBattles > 0 ? Math.round((wins / totalBattles) * 100) : 0;
-
+    const winRate = totalBattles > 0 ? Math.round((wins / totalBattles) * 100) : 0;
+  
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
-
+  
     const userStats = {
       rank: null,
       wins,
@@ -444,15 +460,15 @@ export class TournamentService {
       battlesCompleted: wins + losses,
       totalBattles,
     };
-
+  
     const participantIds = tournament.participants.map((p) => p.id);
-
+  
     const leaderboardUsers = await this.userRepo.find({
       where: { id: In(participantIds) },
       order: { arenaPoints: 'DESC' },
       take: 20,
     });
-
+  
     const leaderboard = leaderboardUsers.map((u, index) => ({
       rank: index + 1,
       username: u.username || u.name,
@@ -468,7 +484,7 @@ export class TournamentService {
       score: u.arenaPoints,
       isCurrentUser: u.id === userId,
     }));
-
+  
     const upcomingBattles = userBattles
       .filter((b) => !b.winnerUser)
       .map((b) => ({
@@ -480,7 +496,41 @@ export class TournamentService {
         date: b.createdAt.toDateString(),
         status: 'active',
       }));
-
+  
+    const computedRounds = await Promise.all(
+      (tournament.rounds ?? []).map(async (round) => {
+        const start = new Date(round.roundStartDate);
+        const end = new Date(round.roundEndDate);
+  
+        let status: 'upcoming' | 'active' | 'completed';
+        if (now < start) {
+          status = 'upcoming';
+        } else if (now > end) {
+          status = 'completed';
+        } else {
+          status = 'active';
+        }
+  
+        const battleCount = await this.battleRepo.count({
+          where: {
+            tournament: { id: tournament.id },
+            roundNumber: round.roundNumber,
+          },
+        });
+  
+        console.log(
+          `🔄 Round ${round.roundNumber}: ${status} | Battles: ${battleCount}`,
+        );
+  
+        return {
+          ...round,
+          status,
+          durationDays: differenceInDays(end, start),
+          hasBattles: battleCount > 0,
+        };
+      }),
+    );
+  
     return {
       id: tournament.id,
       title: tournament.title,
@@ -501,15 +551,13 @@ export class TournamentService {
       updatedAt: tournament.updatedAt,
       participantCount: tournament.participants?.length ?? 0,
       community: tournament.community,
-      rounds: tournament.rounds,
+      rounds: computedRounds,
       progress: {
-        totalRounds: tournament.rounds?.length ?? 0,
-        completedRounds:
-          tournament.rounds?.filter((r) => r.status === 'completed')?.length ??
-          0,
-        pendingRounds:
-          tournament.rounds?.filter((r) => r.status === 'upcoming')?.length ??
-          0,
+        totalRounds: computedRounds.length,
+        completedRounds: computedRounds.filter((r) => r.status === 'completed')
+          .length,
+        pendingRounds: computedRounds.filter((r) => r.status === 'upcoming')
+          .length,
       },
       participants: tournament.participants,
       battles,
@@ -519,4 +567,5 @@ export class TournamentService {
       upcomingBattles,
     };
   }
+  
 }

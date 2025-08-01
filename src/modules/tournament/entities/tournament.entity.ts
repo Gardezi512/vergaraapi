@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
   JoinTable,
   ManyToMany,
+  OneToMany,
 } from 'typeorm';
 import { Community } from 'src/modules/community/entities/community.entity';
 import { User } from 'src/modules/auth/entities/user.entity';
@@ -78,6 +79,8 @@ export class Tournament {
     onDelete: 'CASCADE',
   })
   community: Community;
+
+
 
   @Column('jsonb', { nullable: true })
   rounds?: BattleRound[];
