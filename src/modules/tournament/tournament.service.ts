@@ -13,7 +13,7 @@ import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { User } from '../auth/entities/user.entity';
 import { UsersService } from '../auth/auth.service';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, isEqual } from 'date-fns';
 import { isBefore, isAfter } from 'date-fns';
 import { Battle } from '../battle/entities/battle.entity';
 import { YouTubeProfile } from '../youtubeprofile/entities/youtube.profile.entity';
@@ -437,6 +437,61 @@ export class TournamentService {
         };
       }
     }
+    // --- NEW LOGIC FOR NEXT UPCOMING BATTLE ---
+    let nextUpcomingBattle: {
+      roundNumber: number;
+      roundName: string;
+      opponent?: string;
+      startDate: string;
+      battleId?: number;
+    } | null = null;
+
+    // Sort rounds by start date to find the next one chronologically
+    const sortedRounds = [...(tournament.rounds || [])].sort(
+      (a, b) => new Date(a.roundStartDate).getTime() - new Date(b.roundStartDate).getTime(),
+    );
+
+    for (const round of sortedRounds) {
+      const roundStartDate = new Date(round.roundStartDate);
+      const roundEndDate = new Date(round.roundEndDate);
+
+      // If the round is upcoming or active (but not yet ended)
+      if (isBefore(now, roundEndDate) || isEqual(now, roundEndDate)) {
+        // Find a battle for the current user in this round that is not yet completed
+        const userBattleInRound = userBattles.find(
+          (b) => b.roundNumber === round.roundNumber && !b.winnerUser,
+        );
+
+        if (userBattleInRound) {
+          // Found the next battle for the user
+          const opponent =
+            userBattleInRound.thumbnailA.creator.id === userId
+              ? userBattleInRound.thumbnailB.creator.username || userBattleInRound.thumbnailB.creator.name
+              : userBattleInRound.thumbnailA.creator.username || userBattleInRound.thumbnailA.creator.name;
+
+          nextUpcomingBattle = {
+            roundNumber: round.roundNumber,
+            roundName: round.battleName || `Round ${round.roundNumber}`,
+            opponent,
+            startDate: roundStartDate.toISOString(),
+            battleId: userBattleInRound.id,
+          };
+          break; // Found the next one, exit loop
+        } else if (isBefore(now, roundStartDate) && !userBattleInRound) {
+          // If the round is upcoming and no battle is assigned yet,
+          // it means battles for this round haven't been generated or assigned.
+          // We can still inform the user about the upcoming round.
+          nextUpcomingBattle = {
+            roundNumber: round.roundNumber,
+            roundName: round.battleName || `Round ${round.roundNumber}`,
+            startDate: roundStartDate.toISOString(),
+            // No opponent or battleId yet as battle hasn't been created/assigned
+          };
+          break; // Found the next upcoming round, exit loop
+        }
+      }
+    }
+    // --- END NEW LOGIC ---
   
     const wins = userBattles.filter((b) => b.winnerUser?.id === userId).length;
     const losses = userBattles.filter(

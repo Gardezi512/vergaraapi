@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import { Battle } from './entities/battle.entity';
 import { CreateBattleDto } from './dto/create-battle.dto';
 import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
@@ -496,9 +496,36 @@ export class BattleService {
       completedBattles: enrichedBattles.filter((b) => !b.isLive),
     };
   }
-  
-  
 
+  /**
+   * Counts the number of battles for a specific tournament and round.
+   * @param tournamentId The ID of the tournament.
+   * @param roundNumber The round number.
+   * @returns The count of battles.
+   */
+  async countBattlesForRound(tournamentId: number, roundNumber: number): Promise<number> {
+    return this.battleRepo.count({
+      where: {
+        tournament: { id: tournamentId },
+        roundNumber: roundNumber,
+      },
+    });
+  }
 
-  
+  /**
+   * Counts the number of COMPLETED battles for a specific tournament and round.
+   * A battle is considered completed if it has a winnerUser.
+   * @param tournamentId The ID of the tournament.
+   * @param roundNumber The round number.
+   * @returns The count of completed battles.
+   */
+  async countCompletedBattlesForRound(tournamentId: number, roundNumber: number): Promise<number> {
+    return this.battleRepo.count({
+      where: {
+        tournament: { id: tournamentId },
+        roundNumber: roundNumber,
+        winnerUser: Not(IsNull()), // Check if winnerUser is NOT NULL
+      },
+    });
+  }
 }

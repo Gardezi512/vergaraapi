@@ -12,6 +12,7 @@ import { Battle } from '../battle/entities/battle.entity';
 import { YouTubeProfile } from '../youtubeprofile/entities/youtube.profile.entity';
 import { Thumbnail } from '../thumbnail/entities/thumbnail.entity';
 import { ThumbnailModule } from '../thumbnail/thumbnail.module';
+import { TournamentSchedulerService } from './tournament-scheduler.service'; // Import the new scheduler service
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { ThumbnailModule } from '../thumbnail/thumbnail.module';
     BattleModule,
     ThumbnailModule,
   ],
-  providers: [TournamentService],
+  providers: [TournamentService,TournamentSchedulerService],
   controllers: [TournamentController],
 })
 export class TournamentModule {}

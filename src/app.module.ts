@@ -9,12 +9,14 @@ import { TournamentModule } from './modules/tournament/tournament.module';
 import { ThumbnailModule } from './modules/thumbnail/thumbnail.module';
 import { BattleModule } from './modules/battle/battle.module';
 import { LeaderboardModule } from './modules/leaderboard/leaderboard.module';
+import { ScheduleModule } from '@nestjs/schedule'; // Import ScheduleModule
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(), // Add this line to enable scheduling
     DatabaseModule,
     UsersModule,
     CommunityModule,
