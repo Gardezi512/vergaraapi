@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -18,6 +18,7 @@ import { LoginUserDto } from './dto/auth-login-dto';
 import { OAuth2Client } from 'google-auth-library';
 import axios from 'axios';
 import { YouTubeProfile } from '../youtubeprofile/entities/youtube.profile.entity';
+import { Battle } from '../battle/entities/battle.entity';
 
 @Injectable()
 export class UsersService {
@@ -27,6 +28,8 @@ export class UsersService {
     private readonly jwtService: JwtService,
     @InjectRepository(YouTubeProfile)
     private readonly youtubeProfileRepo: Repository<YouTubeProfile>,
+    @InjectRepository(Battle) 
+    private readonly battleRepo: Repository<Battle>
   ) {}
 
   async create(data: CreateUserDto): Promise<User> {
@@ -183,7 +186,11 @@ export class UsersService {
 
     if (!user) {
       console.log('[Google Login] Creating new user...');
-      user = this.usersRepo.create({ email, name });
+      user = this.usersRepo.create({ email, name , avatar: youtubeData.thumbnail });
+      await this.usersRepo.save(user);
+    }
+    if (!user.avatar && youtubeData.thumbnail) {
+      user.avatar = youtubeData.thumbnail;
       await this.usersRepo.save(user);
     }
 
@@ -317,4 +324,57 @@ export class UsersService {
 
     return youtubeData;
   }
+  async getUserStats(userId: number) {
+    const battles = await this.battleRepo.find({
+      where: [
+        { thumbnailA: { creator: { id: userId } } },
+        { thumbnailB: { creator: { id: userId } } },
+      ],
+      relations: [
+        'thumbnailA', 'thumbnailA.creator',
+        'thumbnailB', 'thumbnailB.creator',
+        'votes', // 💡 Votes are preloaded here
+      ],
+    });
+  
+    let totalVotes = 0;
+    let totalWins = 0;
+    let totalLosses = 0;
+    let totalBattles = battles.length;
+  
+    for (const battle of battles) {
+      const votesA = battle.votes.filter(
+        (v) => v.votedFor.id === battle.thumbnailA.creator.id,
+      ).length;
+  
+      const votesB = battle.votes.filter(
+        (v) => v.votedFor.id === battle.thumbnailB.creator.id,
+      ).length;
+  
+      totalVotes += votesA + votesB;
+  
+      const isUserA = battle.thumbnailA.creator.id === userId;
+      const isUserB = battle.thumbnailB.creator.id === userId;
+  
+      const userVotes = isUserA ? votesA : isUserB ? votesB : 0;
+      const opponentVotes = isUserA ? votesB : isUserB ? votesA : 0;
+  
+      if (userVotes > opponentVotes) totalWins++;
+      else if (userVotes < opponentVotes) totalLosses++;
+      // Draws are ignored
+    }
+  
+    const winRate = totalBattles > 0 ? (totalWins / totalBattles) * 100 : 0;
+  
+    return {
+      userId,
+      totalBattles,
+      totalVotes,
+      totalWins,
+      totalLosses,
+      winRate: Math.round(winRate),
+    };
+  }
+  
+  
 }

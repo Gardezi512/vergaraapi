@@ -9,10 +9,11 @@ import { UsersController } from './auth.controller';
 import { JwtStrategy } from 'src/auth.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { YouTubeProfile } from '../youtubeprofile/entities/youtube.profile.entity';
+import { Battle } from '../battle/entities/battle.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, YouTubeProfile]),
+    TypeOrmModule.forFeature([User, YouTubeProfile,Battle]),
     PassportModule,
     ConfigModule,
     JwtModule.registerAsync({

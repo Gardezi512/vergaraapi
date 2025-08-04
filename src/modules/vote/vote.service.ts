@@ -73,4 +73,84 @@ export class VoteService {
 
     return count;
   }
+
+  // vote.service.ts
+
+async getUserStats(userId: number) {
+  const totalVotes = await this.voteRepo.count({
+    where: { voter: { id: userId } },
+  });
+
+  const user = await this.voteRepo.manager.findOne(User, {
+    where: { id: userId },
+    select: ['arenaPoints'], // avoid sending password or sensitive fields
+  });
+
+  return {
+    arenaPoints: user?.arenaPoints || 0,
+    totalVotes,
+  };
+}
+
+async getCreatorStats(userId: number) {
+  const battles = await this.battleRepo.find({
+    where: [
+      { thumbnailA: { creator: { id: userId } } },
+      { thumbnailB: { creator: { id: userId } } },
+    ],
+    relations: ['thumbnailA', 'thumbnailB'],
+  });
+
+  const battleIds = battles.map((b) => b.id);
+
+  if (battleIds.length === 0) return { receivedVotes: 0 };
+
+  const votes = await this.voteRepo.find({
+    where: battleIds.map((id) => ({ battle: { id } })),
+    relations: ['votedFor'],
+  });
+
+  const receivedVotes = votes.filter(
+    (v) => v.votedFor.id === userId
+  ).length;
+
+  return { receivedVotes };
+}
+async getFullUserStats(userId: number) {
+  const [votingStats, creatorStats] = await Promise.all([
+    this.getUserStats(userId),
+    this.getCreatorStats(userId),
+  ]);
+
+  return {
+    ...votingStats,
+    ...creatorStats,
+  };
+}
+// battles vote stats
+
+async getBattleVoteStats(battleId: number, userIdA: number, userIdB: number) {
+  const votes = await this.voteRepo.find({
+    where: { battle: { id: battleId } },
+    relations: ['votedFor'],
+  });
+
+  const voteCountMap: Record<number, number> = {};
+  for (const vote of votes) {
+    const userId = vote.votedFor.id;
+    voteCountMap[userId] = (voteCountMap[userId] || 0) + 1;
+  }
+
+  const votesA = voteCountMap[userIdA] || 0;
+  const votesB = voteCountMap[userIdB] || 0;
+  const totalVotes = votesA + votesB;
+
+  const winRateA = totalVotes > 0 ? (votesA / totalVotes) * 100 : 50;
+  const winRateB = 100 - winRateA;
+
+  return { votesA, votesB, winRateA, winRateB };
+}
+
+
+
 }

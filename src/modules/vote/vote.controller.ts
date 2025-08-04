@@ -20,4 +20,10 @@ export class VoteController {
         const counts = await this.voteService.countVotes(Number(battleId));
         return { status: true, data: counts };
     }
+
+    @Get('/user/:userId/stats')
+    async getStats(@Param('userId') userId: number) {
+      const stats = await this.voteService.getFullUserStats(userId);
+      return { status: true, data: stats };
+    }
 }

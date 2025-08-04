@@ -35,6 +35,9 @@ export class User {
 
   @Column({ type: 'enum', enum: ['creator', 'Admin'], default: 'creator' })
   role: UserRole;
+  
+  @Column({ nullable: true }) // ✅ Add this line
+  avatar?: string;
 
   @ManyToMany(() => Community, (community) => community.members)
   joinedCommunities: Community[];

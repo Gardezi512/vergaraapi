@@ -12,6 +12,7 @@ import { User } from 'src/modules/auth/entities/user.entity';
 import { Vote } from '../vote/entities/vote.entity';
 import { Tournament } from '../tournament/entities/tournament.entity';
 import { shuffle } from 'lodash';
+import { VoteService } from '../vote/vote.service';
 
 @Injectable()
 export class BattleService {
@@ -26,6 +27,7 @@ export class BattleService {
     private readonly userRepo: Repository<User>,
     @InjectRepository(Vote)
     private readonly voteRepo: Repository<Vote>,
+    private readonly voteService: VoteService, // ✅ Inject this
   ) {}
 
   async create(dto: CreateBattleDto, user: User): Promise<Battle> {
@@ -365,4 +367,138 @@ export class BattleService {
 
     return this.battleRepo.save(battlesToCreate);
   }
+ 
+  async calculateWinRates(battle: Battle): Promise<Record<number, number>> {
+    const rates: Record<number, number> = {};
+    const thumbs = [battle.thumbnailA, battle.thumbnailB];
+  
+    for (const t of thumbs) {
+      const total = t.battleCount;
+      const wins = t.winCount;
+      rates[t.id] = total === 0 ? 0 : Math.round((wins / total) * 100);
+    }
+  
+    return rates;
+  }
+  
+  async getArenaPoints(thumbnailIds: number[]) {
+    const thumbs = await this.thumbnailRepo.find({
+      where: { id: In(thumbnailIds) },
+      relations: ['creator'],
+    });
+  
+    const map: Record<number, number> = {};
+    for (const t of thumbs) {
+      map[t.id] = t.creator.arenaPoints || 0;
+    }
+  
+    return map;
+  }
+  
+  async getAllBattles() {
+    const battles = await this.battleRepo.find({
+      relations: {
+        thumbnailA: { creator: { youtubeProfile: true } },
+        thumbnailB: { creator: { youtubeProfile: true } },
+        tournament: true,
+      },
+      order: { createdAt: 'ASC' },
+    });
+  
+    const enrichedBattles: any[] = [];
+  
+    for (const battle of battles) {
+      const roundInfo = battle.tournament.rounds?.find(
+        (r) => r.roundNumber === battle.roundNumber
+      );
+  
+      if (!roundInfo) continue;
+  
+      // ⏱️ Round start/end time
+      const roundStart = new Date(roundInfo.roundStartDate);
+      const roundEnd = new Date(roundInfo.roundEndDate);
+  
+      const roundBattleCount = await this.battleRepo.count({
+        where: {
+          tournament: { id: battle.tournament.id },
+          roundNumber: battle.roundNumber,
+        },
+      });
+  
+      // 🧠 Determine battle index in this round
+      const battlesInThisRound = battles.filter(
+        (b) =>
+          b.tournament.id === battle.tournament.id &&
+          b.roundNumber === battle.roundNumber
+      );
+      const battleIndex = battlesInThisRound.findIndex((b) => b.id === battle.id);
+  
+      // 🕐 Compute battle timing window
+      const totalDuration = roundEnd.getTime() - roundStart.getTime();
+      const timePerBattle = totalDuration / roundBattleCount;
+  
+      const startTime = new Date(roundStart.getTime() + timePerBattle * battleIndex);
+      const endTime = new Date(startTime.getTime() + timePerBattle);
+      const now = new Date();
+      const isLive = now >= startTime && now < endTime;
+  
+      // ✅ NEW: Get vote counts and win rates from VoteService
+      const {
+        votesA,
+        votesB,
+        winRateA,
+        winRateB,
+      } = await this.voteService.getBattleVoteStats(
+        battle.id,
+        battle.thumbnailA.creator.id,
+        battle.thumbnailB.creator.id
+      );
+  
+      enrichedBattles.push({
+        id: battle.id,
+        roundNumber: battle.roundNumber,
+        tournament: {
+          id: battle.tournament.id,
+          title: battle.tournament.title,
+          category: battle.tournament.category,
+        },
+        endTime: "5 mints from now", //hard coded for twsting now after "endTime.toISOString(),"
+        isLive:true, //harrdcode for testing then true will removed 
+        thumbnailA: {
+          id: battle.thumbnailA.id,
+          imageUrl: battle.thumbnailA.imageUrl,
+          title: battle.thumbnailA.title || 'Untitled',
+          arenaPoints: battle.thumbnailA.creator.arenaPoints || 0,
+          winRate: winRateA,
+          votes: votesA,
+          creator: {
+            username: battle.thumbnailA.creator.username || battle.thumbnailA.creator.name,
+            avatar: battle.thumbnailA.creator.youtubeProfile?.thumbnail || null,
+          },
+        },
+        thumbnailB: {
+          id: battle.thumbnailB.id,
+          imageUrl: battle.thumbnailB.imageUrl,
+          title: battle.thumbnailB.title || 'Untitled',
+          arenaPoints: battle.thumbnailB.creator.arenaPoints || 0,
+          winRate: winRateB,
+          votes: votesB,
+          creator: {
+            username: battle.thumbnailB.creator.username || battle.thumbnailB.creator.name,
+            avatar: battle.thumbnailB.creator.youtubeProfile?.thumbnail || null,
+          },
+        },
+      });
+    }
+  
+    return {
+      liveBattles: enrichedBattles.filter((b) => b.isLive),
+      completedBattles: enrichedBattles.filter((b) => !b.isLive),
+    };
+  }
+  
+  
+
+
+  
 }

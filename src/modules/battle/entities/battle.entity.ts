@@ -4,10 +4,12 @@ import {
   Column,
   ManyToOne,
   CreateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
 import { User } from 'src/modules/auth/entities/user.entity';
 import { Tournament } from 'src/modules/tournament/entities/tournament.entity';
+import { Vote } from 'src/modules/vote/entities/vote.entity';
 
 @Entity('battles')
 export class Battle {
@@ -34,4 +36,8 @@ export class Battle {
 
   @CreateDateColumn()
   createdAt: Date;
+  @OneToMany(() => Vote, (vote) => vote.battle)
+  votes: Vote[];
+  
+
 }

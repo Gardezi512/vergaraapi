@@ -450,17 +450,6 @@ export class TournamentService {
     const winRate = totalBattles > 0 ? Math.round((wins / totalBattles) * 100) : 0;
   
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
-  
-    const userStats = {
-      rank: null,
-      wins,
-      losses,
-      winRate,
-      arenaPoints: user.arenaPoints,
-      battlesCompleted: wins + losses,
-      totalBattles,
-    };
-  
     const participantIds = tournament.participants.map((p) => p.id);
   
     const leaderboardUsers = await this.userRepo.find({
@@ -468,11 +457,10 @@ export class TournamentService {
       order: { arenaPoints: 'DESC' },
       take: 20,
     });
-  
     const leaderboard = leaderboardUsers.map((u, index) => ({
       rank: index + 1,
       username: u.username || u.name,
-      avatar: ':avatar:',
+      avatar: u.youtubeProfile?.thumbnail || null,
       wins: battles.filter((b) => b.winnerUser?.id === u.id).length,
       losses: battles.filter(
         (b) =>
@@ -484,6 +472,21 @@ export class TournamentService {
       score: u.arenaPoints,
       isCurrentUser: u.id === userId,
     }));
+  
+    const userStats = {
+      rank:leaderboard.find((entry) => entry.isCurrentUser),
+      wins,
+      losses,
+      winRate,
+      arenaPoints: user.arenaPoints,
+      battlesCompleted: wins + losses,
+      totalBattles,
+    };
+  
+    
+  
+  
+  
   
     const upcomingBattles = userBattles
       .filter((b) => !b.winnerUser)
