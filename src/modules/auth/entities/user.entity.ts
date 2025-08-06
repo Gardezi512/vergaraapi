@@ -1,6 +1,8 @@
 import { Exclude } from 'class-transformer';
 import { Community } from 'src/modules/community/entities/community.entity';
 import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
+import { Tournament } from 'src/modules/tournament/entities/tournament.entity';
+import { Vote } from 'src/modules/vote/entities/vote.entity';
 import { YouTubeProfile } from 'src/modules/youtubeprofile/entities/youtube.profile.entity';
 import {
   Entity,
@@ -42,6 +44,9 @@ export class User {
   @ManyToMany(() => Community, (community) => community.members)
   joinedCommunities: Community[];
 
+  @OneToMany(() => Tournament, (tournament) => tournament.createdBy)
+tournaments?: Tournament[]
+
   @Column({ default: 0 })
   arenaPoints: number;
 
@@ -59,4 +64,9 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt: Date;
+  @OneToMany(
+    () => Vote,
+    (vote) => vote.voter,
+  )
+  votes: Vote[]
 }

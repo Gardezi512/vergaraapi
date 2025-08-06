@@ -35,8 +35,12 @@ export class Thumbnail {
     @Column({ nullable: true })
     title?: string;
 
-    @ManyToOne(() => Tournament, { nullable: false, onDelete: 'CASCADE' })
-    tournament: Tournament;
+    @ManyToOne(
+        () => Tournament,
+        (tournament) => tournament.thumbnails, // FIX: Corrected inverse side mapping
+        { onDelete: "CASCADE" },
+      )
+      tournament: Tournament
 
     @CreateDateColumn()
     createdAt: Date;

@@ -348,13 +348,13 @@ export class UsersService {
       ).length;
   
       const votesB = battle.votes.filter(
-        (v) => v.votedFor.id === battle.thumbnailB.creator.id,
+        (v) => v.votedFor.id === battle?.thumbnailB?.creator?.id,
       ).length;
   
       totalVotes += votesA + votesB;
   
-      const isUserA = battle.thumbnailA.creator.id === userId;
-      const isUserB = battle.thumbnailB.creator.id === userId;
+      const isUserA = battle?.thumbnailA?.creator?.id === userId;
+      const isUserB = battle?.thumbnailB?.creator?.id === userId;
   
       const userVotes = isUserA ? votesA : isUserB ? votesB : 0;
       const opponentVotes = isUserA ? votesB : isUserB ? votesA : 0;
@@ -375,6 +375,6 @@ export class UsersService {
       winRate: Math.round(winRate),
     };
   }
-  
+
   
 }

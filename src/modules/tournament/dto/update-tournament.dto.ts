@@ -13,6 +13,8 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BattleRoundDto } from './create-tournament.dto';
+import type { TournamentStatus } from "../entities/tournament.entity" // Import TournamentStatus
+
 
 class AccessCriteriaDto {
   @IsOptional()
@@ -109,4 +111,7 @@ export class UpdateTournamentDto {
   @IsOptional()
   @IsInt()
   communityId?: number;
+
+    // Allow updating the status manually by an admin if needed
+    status?: TournamentStatus
 }
