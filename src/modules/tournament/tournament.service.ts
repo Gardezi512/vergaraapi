@@ -717,7 +717,12 @@ async getUserDashboard( tournamentId: number,userId: number): Promise<any> {
     }),
   )
   this.logger.log(`Computed details for ${computedRounds.length} rounds.`)
-
+  console.log('🔍 DEBUG - User Battles:', userBattles.length)
+  console.log('🔍 DEBUG - Battles with winners:', userBattles.filter(b => b.winnerUser).length)
+  console.log('🔍 DEBUG - User wins:', wins)
+  console.log('🔍 DEBUG - User losses:', losses)
+  console.log('🔍 DEBUG - Total battles:', totalBattles)
+  console.log('🔍 DEBUG - Calculated win rate:', winRate)
   return {
     id: tournament.id,
     title: tournament.title,

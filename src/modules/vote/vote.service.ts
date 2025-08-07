@@ -295,7 +295,7 @@ export class VoteService {
     return {
       ...votingStats,
       ...creatorStats,
-    }
+    }      
   }
 
   async getBattleVoteStats(
@@ -361,4 +361,14 @@ export class VoteService {
     this.logger.log(`Votes for battle ${battleId}: Thumbnail A: ${votesA}, Thumbnail B: ${votesB}`)
     return { votesA, votesB }
   }
+  async getUserVoteForBattle(battleId: number, userId: number): Promise<Vote | null> {
+    return this.voteRepo.findOne({
+      where: {
+        battle: { id: battleId },
+        voter: { id: userId },
+      },
+      relations: ['votedFor'],
+    });
+  }
+  
 }

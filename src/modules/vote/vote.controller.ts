@@ -11,9 +11,9 @@ export class VoteController {
     constructor(private readonly voteService: VoteService) { }
 
     @Post()
-    async createVote(createVoteDto: CreateVoteDto, @Request() req) {
+    async createVote(@Body() createVoteDto: CreateVoteDto, @Request() req) {
       this.logger.log(`Received request to create vote: ${JSON.stringify(createVoteDto)} by user ${req.user.id}`)
-      const vote = await this.voteService.vote(req.user, createVoteDto) // Use the 'vote' method from service
+      const vote = await this.voteService.vote(req.user, createVoteDto)
       return { status: true, data: instanceToPlain(vote) }
     }
   

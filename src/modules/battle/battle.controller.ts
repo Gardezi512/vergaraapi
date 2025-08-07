@@ -8,6 +8,8 @@ import {
   ParseIntPipe,
   Get,
   UseInterceptors,
+  Req,
+  Query,
 } from '@nestjs/common';
 import { BattleService } from './battle.service';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
@@ -60,8 +62,8 @@ export class BattleController {
 
   // ✅ PUBLIC: Get all battles of all tournaments
   @Get()
-  async getAllBattles() {
-    const battles = await this.battleService.getAllBattles();
-    return { status: true, data: instanceToPlain(battles) };
-  }
+async getAllBattles(@Query('userId') userId?: number) {
+  const battles = await this.battleService.getAllBattles(userId);
+  return { status: true, data: instanceToPlain(battles) };
+}
 }

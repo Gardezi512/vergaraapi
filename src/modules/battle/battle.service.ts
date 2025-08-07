@@ -493,7 +493,6 @@ async create(dto: CreateBattleDto, user: User): Promise<Battle> {
 
   const tournament = await this.battleRepo.manager.getRepository(Tournament).findOne({
     where: { id: dto.tournamentId },
-    relations: ["rounds"], // Ensure rounds are loaded to find the current round
   })
   if (!tournament) {
     this.logger.error(`Tournament with ID ${dto.tournamentId} not found.`)
@@ -645,7 +644,7 @@ async generateRandomBattlesForRound(tournamentId: number, roundNumber: number, c
 
   const tournament = await this.battleRepo.manager.getRepository(Tournament).findOne({
     where: { id: tournamentId },
-    relations: ["participants", "rounds"], // Ensure rounds are loaded
+    relations: ["participants"], // Ensure rounds are loaded
   })
   if (!tournament) {
     this.logger.error(`Tournament with ID ${tournamentId} not found.`)
@@ -786,7 +785,7 @@ async generateNextRoundBattles(tournamentId: number, currentRound: number, creat
   this.logger.log(`Generating next round battles for tournament ${tournamentId}, from round ${currentRound}.`)
   const tournament = await this.battleRepo.manager.getRepository(Tournament).findOne({
     where: { id: tournamentId },
-    relations: ["rounds"], // Ensure rounds are loaded
+  
   })
   if (!tournament) {
     this.logger.error(`Tournament with ID ${tournamentId} not found.`)
@@ -877,12 +876,12 @@ async getArenaPoints(thumbnailIds: number[]) {
   return map
 }
 
-async getAllBattles() {
+async getAllBattles(userId?: number) {
   const battles = await this.battleRepo.find({
     relations: {
       thumbnailA: { creator: { youtubeProfile: true } },
       thumbnailB: { creator: { youtubeProfile: true } },
-      tournament: { rounds: true }, // Load rounds for timing calculations
+      tournament:  true , 
     },
     order: { createdAt: "ASC" },
   })
@@ -906,6 +905,17 @@ async getAllBattles() {
       },
     })
 
+    const hasVoted = userId
+    ? !!(await this.voteRepo.findOne({
+        where: {
+          battle: { id: battle.id }, // assuming `battle` is the object, not just id
+          voter: { id: userId },
+        },
+      }))
+    : false;
+    const vote = userId ? await this.voteService.getUserVoteForBattle(battle.id, userId) : null;
+
+  
     const battlesInThisRound = battles.filter(
       (b) => b.tournament.id === battle.tournament.id && b.roundNumber === battle.roundNumber,
     )
@@ -949,6 +959,15 @@ async getAllBattles() {
       },
       endTime: endTime.toISOString(),
       isLive: isLive,
+      voteInfo: vote
+      ? {
+          userHasVoted: true,
+          votedFor: vote.votedFor, // or vote.votedFor.id, etc.
+        }
+      : {
+          userHasVoted: false,
+          votedFor: null,
+        },
       thumbnailA: {
         id: battle.thumbnailA.id,
         imageUrl: battle.thumbnailA.imageUrl,
