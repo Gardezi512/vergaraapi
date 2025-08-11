@@ -10,7 +10,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
-import { BattleRound, Tournament, TournamentStatus } from './entities/tournament.entity';
+import {
+  BattleRound,
+  Tournament,
+  TournamentStatus,
+} from './entities/tournament.entity';
 import { Community } from 'src/modules/community/entities/community.entity';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
@@ -40,7 +44,7 @@ export class TournamentService {
     private readonly youTubeProfileRepo: Repository<YouTubeProfile>,
     @InjectRepository(Thumbnail)
     private readonly thumbnailRepo: Repository<Thumbnail>,
-    private readonly thumbnailService: ThumbnailService, 
+    private readonly thumbnailService: ThumbnailService,
     @InjectRepository(Vote)
     private readonly voteRepo: Repository<Vote>,
     private readonly voteService: VoteService,
@@ -48,750 +52,941 @@ export class TournamentService {
     private readonly userRepo: Repository<User>,
     private readonly authService: UsersService,
     private readonly dataSource: DataSource, // ✅ inject DataSource
-   
-    
   ) {}
 
-
-private validateRounds(rounds: BattleRound[] | undefined, tournamentStart: Date, tournamentEnd: Date) {
-  this.logger.log(`Validating rounds. Total rounds: ${rounds?.length || 0}`)
-  if (!rounds?.length) {
-    throw new BadRequestException("A tournament must have at least one round.")
-  }
-  // Every round inside tournament window
-  rounds.forEach((r, idx) => {
-    const roundStartDate = new Date(r.roundStartDate)
-    const roundEndDate = new Date(r.roundEndDate)
-    if (isBefore(roundStartDate, tournamentStart) || isAfter(roundEndDate, tournamentEnd)) {
-      this.logger.error(
-        `Round #${idx + 1} dates (${roundStartDate.toISOString()} - ${roundEndDate.toISOString()}) are outside tournament dates (${tournamentStart.toISOString()} - ${tournamentEnd.toISOString()}).`,
-      )
-      throw new BadRequestException(`Round #${idx + 1} dates must be between tournament start & end.`)
-    }
-    if (isAfter(roundStartDate, roundEndDate)) {
-      this.logger.error(
-        `Round #${idx + 1} start date (${roundStartDate.toISOString()}) is after end date (${roundEndDate.toISOString()}).`,
-      )
-      throw new BadRequestException(`Round #${idx + 1} start date must be ≤ end date.`)
-    }
-  })
-  // No overlaps - sort by start, then compare neighbours
-  const sorted = [...rounds].sort((a, b) => +new Date(a.roundStartDate) - +new Date(b.roundStartDate))
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const currentRoundEnd = new Date(sorted[i].roundEndDate)
-    const nextRoundStart = new Date(sorted[i + 1].roundStartDate)
-    if (isBefore(nextRoundStart, currentRoundEnd) || isEqual(nextRoundStart, currentRoundEnd)) {
-      this.logger.error(
-        `Round #${sorted[i].roundNumber} (ends ${currentRoundEnd.toISOString()}) overlaps with Round #${
-          sorted[i + 1].roundNumber
-        } (starts ${nextRoundStart.toISOString()}).`,
-      )
+  private validateRounds(
+    rounds: BattleRound[] | undefined,
+    tournamentStart: Date,
+    tournamentEnd: Date,
+  ) {
+    this.logger.log(`Validating rounds. Total rounds: ${rounds?.length || 0}`);
+    if (!rounds?.length) {
       throw new BadRequestException(
-        `Round #${sorted[i].roundNumber} date overlaps with Round #${sorted[i + 1].roundNumber}.`,
-      )
+        'A tournament must have at least one round.',
+      );
     }
-  }
-  this.logger.log("Rounds validated successfully.")
-}
-
-//  Dedicated method for tournament date validation
-
-private validateTournamentDates(
-  startDate: Date | string,
-  endDate: Date | string,
-  registrationDeadline?: Date | string
-) {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const deadline = registrationDeadline ? new Date(registrationDeadline) : null;
-
-  // Validate all parsed dates
-  if (isNaN(start.getTime()) || isNaN(end.getTime()) || (deadline && isNaN(deadline.getTime()))) {
-    this.logger.error("One or more tournament dates are invalid.");
-    throw new BadRequestException("Invalid tournament date(s) provided.");
-  }
-
-  // Log all dates in ISO format
-  this.logger.log(
-    `Validating tournament dates: Start ${start.toISOString()}, End ${end.toISOString()}, Registration Deadline ${deadline?.toISOString() || "N/A"}`
-  );
-
-  // Check: Start must not be after End
-  if (isAfter(start, end)) {
-    this.logger.error("Tournament start date cannot be after end date.");
-    throw new BadRequestException("Tournament start date cannot be after end date.");
-  }
-
-  // Check: Deadline must not be before Start and must not be after End
-  if (deadline) {
-    if (isBefore(deadline, start)) {
-      this.logger.error("Registration deadline cannot be before tournament start date.");
-      throw new BadRequestException("Registration deadline cannot be before tournament start date.");
-    }
-    if (isAfter(deadline, end)) {
-      this.logger.error("Registration deadline cannot be after tournament end date.");
-      throw new BadRequestException("Registration deadline cannot be after tournament end date.");
-    }
-  }
-
-  this.logger.log("Tournament dates validated successfully.");
-}
-
-
-async create(dto: CreateTournamentDto, user: User): Promise<Tournament> {
-  this.logger.log(`Attempting to create tournament: ${dto.title}`)
-  const community = await this.communityRepo.findOne({
-    where: { id: dto.communityId },
-  })
-  if (!community) {
-    this.logger.error(`Community ${dto.communityId} not found.`)
-    throw new NotFoundException("Community not found")
-  }
-  this.logger.log(`Community ${community.title} found.`)
-
-  // Call new date validation
-  this.validateTournamentDates(dto.startDate, dto.endDate, dto.registrationDeadline)
-  this.validateRounds(dto.rounds, dto.startDate, dto.endDate)
-
-  if (dto.maxParticipants !== undefined && dto.maxParticipants < 2) {
-    this.logger.error(`Max participants (${dto.maxParticipants}) must be at least 2.`)
-    throw new BadRequestException("Maximum participants must be at least 2 for a tournament.")
-  }
-  this.logger.log(`Max participants (${dto.maxParticipants}) validated.`)
-
-  const tournament = this.tournamentRepo.create({
-    title: dto.title,
-    description: dto.description,
-    startDate: dto.startDate,
-    endDate: dto.endDate,
-    format: dto.format , // Added default
-    structure: dto.structure , // Added default
-    category: dto.category,
-    subcategory: dto.subcategory,
-    accessType: dto.accessType, // Added default
-    accessCriteria: dto.accessCriteria,
-    TournamentRewards: dto.TournamentRewards,
-    imageUrl: dto.imageUrl,
-    rounds: dto.rounds,
-    registrationDeadline: dto.registrationDeadline,
-    maxParticipants: dto.maxParticipants,
-    community,
-    createdBy: user,
-  })
-  this.logger.log(`Tournament object created. Saving to DB...`)
-  return this.tournamentRepo.save(tournament)
-}
-
-async findAll(): Promise<Tournament[]> {
-  this.logger.log("Fetching all tournaments.")
-  return this.tournamentRepo.find({
-    relations: ["community", "createdBy", "participants"],
-  })
-}
-
-async findOne(id: number): Promise<any> {
-  this.logger.log(`Fetching tournament with ID: ${id}`)
-  const tournament = await this.tournamentRepo.findOne({
-    where: { id },
-    relations: ["community", "participants"], // Ensure rounds are loaded
-  })
-  if (!tournament) {
-    this.logger.error(`Tournament ${id} not found.`)
-    throw new NotFoundException("Tournament not found")
-  }
-  this.logger.log(`Tournament ${tournament.id} found.`)
-
-  const now = new Date()
-  const roundsWithDetails =
-    tournament.rounds?.map((round) => {
-      const start = new Date(round.roundStartDate)
-      const end = new Date(round.roundEndDate)
-      let status: "upcoming" | "active" | "completed"
-      if (isBefore(now, start)) {
-        status = "upcoming"
-      } else if (isAfter(now, end)) {
-        status = "completed"
-      } else {
-        status = "active"
+    // Every round inside tournament window
+    rounds.forEach((r, idx) => {
+      const roundStartDate = new Date(r.roundStartDate);
+      const roundEndDate = new Date(r.roundEndDate);
+      if (
+        isBefore(roundStartDate, tournamentStart) ||
+        isAfter(roundEndDate, tournamentEnd)
+      ) {
+        this.logger.error(
+          `Round #${idx + 1} dates (${roundStartDate.toISOString()} - ${roundEndDate.toISOString()}) are outside tournament dates (${tournamentStart.toISOString()} - ${tournamentEnd.toISOString()}).`,
+        );
+        throw new BadRequestException(
+          `Round #${idx + 1} dates must be between tournament start & end.`,
+        );
       }
-      return {
-        ...round,
-        durationDays: differenceInDays(end, start),
-        status,
+      if (isAfter(roundStartDate, roundEndDate)) {
+        this.logger.error(
+          `Round #${idx + 1} start date (${roundStartDate.toISOString()}) is after end date (${roundEndDate.toISOString()}).`,
+        );
+        throw new BadRequestException(
+          `Round #${idx + 1} start date must be ≤ end date.`,
+        );
       }
-    }) || []
-  this.logger.log(`Processed ${roundsWithDetails.length} rounds.`)
-
-  const totalRounds = roundsWithDetails.length
-  const completedRounds = roundsWithDetails.filter((r) => r.status === "completed").length
-  const pendingRounds = roundsWithDetails.filter((r) => r.status === "upcoming").length
-
-  // get participant count
-  const participantCount = tournament.participants.length
-  this.logger.log(`Participant count: ${participantCount}`)
-
-  return {
-    ...tournament,
-    rounds: roundsWithDetails,
-    progress: {
-      totalRounds,
-      completedRounds,
-      pendingRounds,
-    },
-    participantCount,
-  }
-}
-
-async getJoinedTournaments(userId: number): Promise<Tournament[]> {
-  this.logger.log(`Fetching tournaments joined by user ${userId}.`)
-  return this.tournamentRepo
-    .createQueryBuilder("tournament")
-    .leftJoinAndSelect("tournament.participants", "participant")
-    .leftJoinAndSelect("tournament.community", "community")
-    .leftJoinAndSelect("tournament.createdBy", "createdBy")
-    .where("participant.id = :userId", { userId })
-    .getMany()
-}
-
-async update(id: number, dto: UpdateTournamentDto, user: User): Promise<Tournament> {
-  this.logger.log(`Attempting to update tournament ${id}.`)
-  const tournament = await this.tournamentRepo.findOne({
-    where: { id },
-    relations: ["community", "createdBy"], // Load rounds for validation
-  })
-  if (!tournament) {
-    this.logger.error(`Tournament ${id} not found for update.`)
-    throw new NotFoundException("Tournament not found")
-  }
-  this.logger.log(`Tournament ${tournament.id} found for update.`)
-
-  const community = await this.communityRepo.findOne({
-    where: { id: dto.communityId ?? tournament.community.id }, // Use existing community ID if not provided
-  })
-  if (!community) {
-    this.logger.error(`Community ${dto.communityId} not found for update.`)
-    throw new NotFoundException("Community not found ")
-  }
-  this.logger.log(`Community ${community.title} found for update.`)
-
-  const isOwner = tournament.createdBy?.id === user.id
-  const isAdmin = user.role === "Admin"
-  if (!isOwner && !isAdmin) {
-    this.logger.warn(`User ${user.id} forbidden to update tournament ${id}. Not owner or admin.`)
-    throw new ForbiddenException("You do not have permission to update this tournament.")
-  }
-  this.logger.log(`User ${user.id} has permission to update tournament ${id}.`)
-
-  const newStart = dto.startDate ?? tournament.startDate
-  const newEnd = dto.endDate ?? tournament.endDate
-  const newRegistrationDeadline = dto.registrationDeadline ?? tournament.registrationDeadline
-  const newRounds = dto.rounds ?? tournament.rounds
-  const newMaxParticipants = dto.maxParticipants ?? tournament.maxParticipants
-
-  // Call new date validation
-  this.validateTournamentDates(newStart, newEnd, newRegistrationDeadline)
-  this.validateRounds(newRounds, newStart, newEnd)
-
-  if (newMaxParticipants !== undefined && newMaxParticipants < 2) {
-    this.logger.error(`Max participants (${newMaxParticipants}) must be at least 2 for tournament ${id}.`)
-    throw new BadRequestException("Maximum participants must be at least 2 for a tournament.")
-  }
-  this.logger.log(`Max participants (${newMaxParticipants}) validated for update.`)
-
-  Object.assign(tournament, {
-    title: dto.title ?? tournament.title,
-    community: community,
-    description: dto.description ?? tournament.description,
-    startDate: newStart,
-    endDate: newEnd,
-    format: dto.format ?? tournament.format,
-    structure: dto.structure ?? tournament.structure,
-    category: dto.category ?? tournament.category,
-    subcategory: dto.subcategory ?? tournament.subcategory,
-    accessType: dto.accessType ?? tournament.accessType,
-    accessCriteria: dto.accessCriteria ?? tournament.accessCriteria,
-    TournamentRewards: dto.TournamentRewards ?? tournament.TournamentRewards,
-    imageUrl: dto.imageUrl ?? tournament.imageUrl,
-    rounds: newRounds,
-    registrationDeadline: newRegistrationDeadline,
-    maxParticipants: newMaxParticipants,
-    status: dto.status ?? tournament.status, // Allow status update via DTO for admin/owner
-  })
-  this.logger.log(`Tournament ${tournament.id} object updated. Saving to DB...`)
-  return this.tournamentRepo.save(tournament)
-}
-
-async remove(id: number, user: User): Promise<void> {
-  this.logger.log("--- Starting Tournament Deletion Check ---")
-  this.logger.log("Attempting to delete Tournament ID:", id)
-  this.logger.log("User attempting deletion (full object):", user)
-
-  if (!user || !user.id || !user.role) {
-    this.logger.error("Error: User object is incomplete or null.")
-    throw new ForbiddenException("Authentication required to perform this action.")
-  }
-
-  const tournament = await this.tournamentRepo.findOne({
-    where: { id },
-    relations: ["createdBy"],
-  })
-  if (!tournament) {
-    this.logger.warn(`Tournament with ID ${id} not found for deletion.`)
-    throw new NotFoundException(`Tournament with ID ${id} not found.`)
-  }
-  this.logger.log("Fetched Tournament (in remove method):", tournament.id, tournament.title)
-  this.logger.log("Tournament Creator ID (from tournament.createdBy?.id):", tournament.createdBy?.id)
-  this.logger.log(
-    "Tournament Creator Username (from tournament.createdBy?.username):",
-    tournament.createdBy?.username,
-  )
-
-  const isOwner = tournament.createdBy?.id === user.id
-  const isAdmin = user.role === "Admin"
-  this.logger.log("Is current user the owner (tournament.createdBy?.id === user.id)?", isOwner)
-  this.logger.log("Is current user an Admin (user.role === 'Admin')?", isAdmin)
-
-  if (!isOwner && !isAdmin) {
-    this.logger.warn(`Deletion forbidden: User ${user.id} is not owner (${tournament.createdBy?.id}) and not Admin.`)
-    throw new ForbiddenException("You do not have permission to delete this tournament.")
-  }
-  this.logger.log("Permission granted. Deleting tournament...")
-  await this.tournamentRepo.delete(id)
-  this.logger.log(`Tournament ID ${id} successfully deleted.`)
-  this.logger.log("--- Tournament Deletion Check Complete ---")
-}
-
-async joinTournament(
-  tournamentId: number,
-  user: User,
-  youtubeAccessToken: string,
-  thumbnailUrl: string,
-): Promise<{ message: string; thumbnail: Thumbnail }> {
-  const tournament = await this.tournamentRepo.findOne({
-    where: { id: tournamentId },
-    relations: ["participants"],
-  });
-
-  if (!tournament) throw new NotFoundException("Tournament not found");
-
-  if ([TournamentStatus.CANCELLED, TournamentStatus.CONCLUDED].includes(tournament.status)) {
-    throw new BadRequestException("This tournament cannot be joined.");
-  }
-
-  const now = new Date();
-  if (isBefore(now, new Date(tournament.startDate))) {
-    throw new BadRequestException("Tournament has not started yet.");
-  }
-  if (tournament.registrationDeadline && isAfter(now, new Date(tournament.registrationDeadline))) {
-    throw new BadRequestException("Registration for this tournament has closed.");
-  }
-  if (tournament.maxParticipants && tournament.participants.length >= tournament.maxParticipants) {
-    throw new BadRequestException("This tournament is full.");
-  }
-
-  if (tournament.accessType === 'invite-only') {
-    throw new ForbiddenException("Invite-only tournament.");
-  }
-
-  if (tournament.accessType === 'restricted') {
-    const criteria = tournament.accessCriteria;
-    const youtubeData = await this.authService.fetchYouTubeChannelData(youtubeAccessToken);
-    if (!youtubeData) throw new BadRequestException("Unable to fetch YouTube data.");
-
-    const subscribers = parseInt(youtubeData.subscribers || '0', 10);
-    const arenaPoints = user.arenaPoints ?? 0;
-    const elo = user.elo ?? 0;
-
-    if (criteria?.minSubscribers && subscribers < criteria.minSubscribers) {
-      throw new BadRequestException(`You need at least ${criteria.minSubscribers} subscribers.`);
-    }
-    if (criteria?.minArenaPoints && arenaPoints < criteria.minArenaPoints) {
-      throw new BadRequestException(`You need at least ${criteria.minArenaPoints} arena points.`);
-    }
-    if (criteria?.minElo && elo < criteria.minElo) {
-      throw new BadRequestException(`You need at least ${criteria.minElo} ELO.`);
-    }
-  }
-
-  const alreadyJoined = tournament.participants.some(p => p.id === user.id);
-  if (alreadyJoined) {
-    const existingThumbnail = await this.thumbnailRepo.findOne({
-      where: { creator: { id: user.id }, tournament: { id: tournamentId } },
     });
-    if (!existingThumbnail) {
-      throw new BadRequestException("You already joined, but your thumbnail is missing.");
+    // No overlaps - sort by start, then compare neighbours
+    const sorted = [...rounds].sort(
+      (a, b) => +new Date(a.roundStartDate) - +new Date(b.roundStartDate),
+    );
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const currentRoundEnd = new Date(sorted[i].roundEndDate);
+      const nextRoundStart = new Date(sorted[i + 1].roundStartDate);
+      if (
+        isBefore(nextRoundStart, currentRoundEnd) ||
+        isEqual(nextRoundStart, currentRoundEnd)
+      ) {
+        this.logger.error(
+          `Round #${sorted[i].roundNumber} (ends ${currentRoundEnd.toISOString()}) overlaps with Round #${
+            sorted[i + 1].roundNumber
+          } (starts ${nextRoundStart.toISOString()}).`,
+        );
+        throw new BadRequestException(
+          `Round #${sorted[i].roundNumber} date overlaps with Round #${sorted[i + 1].roundNumber}.`,
+        );
+      }
     }
+    this.logger.log('Rounds validated successfully.');
+  }
+
+  //  Dedicated method for tournament date validation
+
+  private validateTournamentDates(
+    startDate: Date | string,
+    endDate: Date | string,
+    registrationDeadline?: Date | string,
+  ) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const deadline = registrationDeadline
+      ? new Date(registrationDeadline)
+      : null;
+
+    // Validate all parsed dates
+    if (
+      isNaN(start.getTime()) ||
+      isNaN(end.getTime()) ||
+      (deadline && isNaN(deadline.getTime()))
+    ) {
+      this.logger.error('One or more tournament dates are invalid.');
+      throw new BadRequestException('Invalid tournament date(s) provided.');
+    }
+
+    // Log all dates in ISO format
+    this.logger.log(
+      `Validating tournament dates: Start ${start.toISOString()}, End ${end.toISOString()}, Registration Deadline ${deadline?.toISOString() || 'N/A'}`,
+    );
+
+    // Check: Start must not be after End
+    if (isAfter(start, end)) {
+      this.logger.error('Tournament start date cannot be after end date.');
+      throw new BadRequestException(
+        'Tournament start date cannot be after end date.',
+      );
+    }
+
+    // Check: Deadline must not be before Start and must not be after End
+    if (deadline) {
+      if (isBefore(deadline, start)) {
+        this.logger.error(
+          'Registration deadline cannot be before tournament start date.',
+        );
+        throw new BadRequestException(
+          'Registration deadline cannot be before tournament start date.',
+        );
+      }
+      if (isAfter(deadline, end)) {
+        this.logger.error(
+          'Registration deadline cannot be after tournament end date.',
+        );
+        throw new BadRequestException(
+          'Registration deadline cannot be after tournament end date.',
+        );
+      }
+    }
+
+    this.logger.log('Tournament dates validated successfully.');
+  }
+
+  async create(dto: CreateTournamentDto, user: User): Promise<Tournament> {
+    this.logger.log(`Attempting to create tournament: ${dto.title}`);
+    const community = await this.communityRepo.findOne({
+      where: { id: dto.communityId },
+    });
+    if (!community) {
+      this.logger.error(`Community ${dto.communityId} not found.`);
+      throw new NotFoundException('Community not found');
+    }
+    this.logger.log(`Community ${community.title} found.`);
+
+    // Call new date validation
+    this.validateTournamentDates(
+      dto.startDate,
+      dto.endDate,
+      dto.registrationDeadline,
+    );
+    this.validateRounds(dto.rounds, dto.startDate, dto.endDate);
+
+    if (dto.maxParticipants !== undefined && dto.maxParticipants < 2) {
+      this.logger.error(
+        `Max participants (${dto.maxParticipants}) must be at least 2.`,
+      );
+      throw new BadRequestException(
+        'Maximum participants must be at least 2 for a tournament.',
+      );
+    }
+    this.logger.log(`Max participants (${dto.maxParticipants}) validated.`);
+
+    const tournament = this.tournamentRepo.create({
+      title: dto.title,
+      description: dto.description,
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      format: dto.format, // Added default
+      structure: dto.structure, // Added default
+      category: dto.category,
+      subcategory: dto.subcategory,
+      accessType: dto.accessType, // Added default
+      accessCriteria: dto.accessCriteria,
+      TournamentRewards: dto.TournamentRewards,
+      imageUrl: dto.imageUrl,
+      rounds: dto.rounds,
+      registrationDeadline: dto.registrationDeadline,
+      maxParticipants: dto.maxParticipants,
+      community,
+      createdBy: user,
+    });
+    this.logger.log(`Tournament object created. Saving to DB...`);
+    return this.tournamentRepo.save(tournament);
+  }
+
+  async findAll(): Promise<Tournament[]> {
+    this.logger.log('Fetching all tournaments.');
+    return this.tournamentRepo.find({
+      relations: ['community', 'createdBy', 'participants'],
+    });
+  }
+
+  async findOne(id: number): Promise<any> {
+    this.logger.log(`Fetching tournament with ID: ${id}`);
+    const tournament = await this.tournamentRepo.findOne({
+      where: { id },
+      relations: ['community', 'participants'], // Ensure rounds are loaded
+    });
+    if (!tournament) {
+      this.logger.error(`Tournament ${id} not found.`);
+      throw new NotFoundException('Tournament not found');
+    }
+    this.logger.log(`Tournament ${tournament.id} found.`);
+
+    const now = new Date();
+    const roundsWithDetails =
+      tournament.rounds?.map((round) => {
+        const start = new Date(round.roundStartDate);
+        const end = new Date(round.roundEndDate);
+        let status: 'upcoming' | 'active' | 'completed';
+        if (isBefore(now, start)) {
+          status = 'upcoming';
+        } else if (isAfter(now, end)) {
+          status = 'completed';
+        } else {
+          status = 'active';
+        }
+        return {
+          ...round,
+          durationDays: differenceInDays(end, start),
+          status,
+        };
+      }) || [];
+    this.logger.log(`Processed ${roundsWithDetails.length} rounds.`);
+
+    const totalRounds = roundsWithDetails.length;
+    const completedRounds = roundsWithDetails.filter(
+      (r) => r.status === 'completed',
+    ).length;
+    const pendingRounds = roundsWithDetails.filter(
+      (r) => r.status === 'upcoming',
+    ).length;
+
+    // get participant count
+    const participantCount = tournament.participants.length;
+    this.logger.log(`Participant count: ${participantCount}`);
+
     return {
-      message: "You have already joined this tournament!",
-      thumbnail: existingThumbnail,
+      ...tournament,
+      rounds: roundsWithDetails,
+      progress: {
+        totalRounds,
+        completedRounds,
+        pendingRounds,
+      },
+      participantCount,
     };
   }
 
-  // ✅ Validate thumbnail
-  if (!thumbnailUrl || thumbnailUrl.trim() === "") {
-    throw new BadRequestException("A thumbnail URL is required.");
+  async getJoinedTournaments(userId: number): Promise<Tournament[]> {
+    this.logger.log(`Fetching tournaments joined by user ${userId}.`);
+    return this.tournamentRepo
+      .createQueryBuilder('tournament')
+      .leftJoinAndSelect('tournament.participants', 'participant')
+      .leftJoinAndSelect('tournament.community', 'community')
+      .leftJoinAndSelect('tournament.createdBy', 'createdBy')
+      .where('participant.id = :userId', { userId })
+      .getMany();
   }
 
-  const isYouTubeUrl = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//.test(thumbnailUrl);
-  const isImageUrl = /\.(jpeg|jpg|gif|png|webp)$/.test(thumbnailUrl);
+  async update(
+    id: number,
+    dto: UpdateTournamentDto,
+    user: User,
+  ): Promise<Tournament> {
+    this.logger.log(`Attempting to update tournament ${id}.`);
+    const tournament = await this.tournamentRepo.findOne({
+      where: { id },
+      relations: ['community', 'createdBy'], // Load rounds for validation
+    });
+    if (!tournament) {
+      this.logger.error(`Tournament ${id} not found for update.`);
+      throw new NotFoundException('Tournament not found');
+    }
+    this.logger.log(`Tournament ${tournament.id} found for update.`);
 
-  if (!isYouTubeUrl && !isImageUrl) {
-    throw new BadRequestException("Invalid thumbnail URL.");
+    const community = await this.communityRepo.findOne({
+      where: { id: dto.communityId ?? tournament.community.id }, // Use existing community ID if not provided
+    });
+    if (!community) {
+      this.logger.error(`Community ${dto.communityId} not found for update.`);
+      throw new NotFoundException('Community not found ');
+    }
+    this.logger.log(`Community ${community.title} found for update.`);
+
+    const isOwner = tournament.createdBy?.id === user.id;
+    const isAdmin = user.role === 'Admin';
+    if (!isOwner && !isAdmin) {
+      this.logger.warn(
+        `User ${user.id} forbidden to update tournament ${id}. Not owner or admin.`,
+      );
+      throw new ForbiddenException(
+        'You do not have permission to update this tournament.',
+      );
+    }
+    this.logger.log(
+      `User ${user.id} has permission to update tournament ${id}.`,
+    );
+
+    const newStart = dto.startDate ?? tournament.startDate;
+    const newEnd = dto.endDate ?? tournament.endDate;
+    const newRegistrationDeadline =
+      dto.registrationDeadline ?? tournament.registrationDeadline;
+    const newRounds = dto.rounds ?? tournament.rounds;
+    const newMaxParticipants =
+      dto.maxParticipants ?? tournament.maxParticipants;
+
+    // Call new date validation
+    this.validateTournamentDates(newStart, newEnd, newRegistrationDeadline);
+    this.validateRounds(newRounds, newStart, newEnd);
+
+    if (newMaxParticipants !== undefined && newMaxParticipants < 2) {
+      this.logger.error(
+        `Max participants (${newMaxParticipants}) must be at least 2 for tournament ${id}.`,
+      );
+      throw new BadRequestException(
+        'Maximum participants must be at least 2 for a tournament.',
+      );
+    }
+    this.logger.log(
+      `Max participants (${newMaxParticipants}) validated for update.`,
+    );
+
+    Object.assign(tournament, {
+      title: dto.title ?? tournament.title,
+      community: community,
+      description: dto.description ?? tournament.description,
+      startDate: newStart,
+      endDate: newEnd,
+      format: dto.format ?? tournament.format,
+      structure: dto.structure ?? tournament.structure,
+      category: dto.category ?? tournament.category,
+      subcategory: dto.subcategory ?? tournament.subcategory,
+      accessType: dto.accessType ?? tournament.accessType,
+      accessCriteria: dto.accessCriteria ?? tournament.accessCriteria,
+      TournamentRewards: dto.TournamentRewards ?? tournament.TournamentRewards,
+      imageUrl: dto.imageUrl ?? tournament.imageUrl,
+      rounds: newRounds,
+      registrationDeadline: newRegistrationDeadline,
+      maxParticipants: newMaxParticipants,
+      status: dto.status ?? tournament.status, // Allow status update via DTO for admin/owner
+    });
+    this.logger.log(
+      `Tournament ${tournament.id} object updated. Saving to DB...`,
+    );
+    return this.tournamentRepo.save(tournament);
   }
 
-  // ✅ Normalize YouTube link
-  let finalImageUrl = thumbnailUrl;
-  if (isYouTubeUrl) {
-    const videoId = this.extractYouTubeVideoId(thumbnailUrl);
-    if (!videoId) throw new BadRequestException("Invalid YouTube URL format.");
-    finalImageUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+  async remove(id: number, user: User): Promise<void> {
+    this.logger.log('--- Starting Tournament Deletion Check ---');
+    this.logger.log('Attempting to delete Tournament ID:', id);
+    this.logger.log('User attempting deletion (full object):', user);
+
+    if (!user || !user.id || !user.role) {
+      this.logger.error('Error: User object is incomplete or null.');
+      throw new ForbiddenException(
+        'Authentication required to perform this action.',
+      );
+    }
+
+    const tournament = await this.tournamentRepo.findOne({
+      where: { id },
+      relations: ['createdBy'],
+    });
+    if (!tournament) {
+      this.logger.warn(`Tournament with ID ${id} not found for deletion.`);
+      throw new NotFoundException(`Tournament with ID ${id} not found.`);
+    }
+    this.logger.log(
+      'Fetched Tournament (in remove method):',
+      tournament.id,
+      tournament.title,
+    );
+    this.logger.log(
+      'Tournament Creator ID (from tournament.createdBy?.id):',
+      tournament.createdBy?.id,
+    );
+    this.logger.log(
+      'Tournament Creator Username (from tournament.createdBy?.username):',
+      tournament.createdBy?.username,
+    );
+
+    const isOwner = tournament.createdBy?.id === user.id;
+    const isAdmin = user.role === 'Admin';
+    this.logger.log(
+      'Is current user the owner (tournament.createdBy?.id === user.id)?',
+      isOwner,
+    );
+    this.logger.log(
+      "Is current user an Admin (user.role === 'Admin')?",
+      isAdmin,
+    );
+
+    if (!isOwner && !isAdmin) {
+      this.logger.warn(
+        `Deletion forbidden: User ${user.id} is not owner (${tournament.createdBy?.id}) and not Admin.`,
+      );
+      throw new ForbiddenException(
+        'You do not have permission to delete this tournament.',
+      );
+    }
+    this.logger.log('Permission granted. Deleting tournament...');
+    await this.tournamentRepo.delete(id);
+    this.logger.log(`Tournament ID ${id} successfully deleted.`);
+    this.logger.log('--- Tournament Deletion Check Complete ---');
   }
 
-// Save thumbnail inside transaction with participant join
-return await this.dataSource.transaction(async manager => {
-   // ✅ Create thumbnail using transactional manager
-   const thumbnail = manager.getRepository(Thumbnail).create({
-    tournament: { id: tournament.id } as Tournament,
-    tournamentId: tournament.id,
-    imageUrl: finalImageUrl,
-    title: `Thumbnail for ${user.username || user.email}`,
-    creator: { id: user.id } as User,
-  });
-  tournament.participants.push({ id: user.id } as User);
-  await manager.getRepository(Tournament).save(tournament);
-  
- const savedThumbnail = await manager.getRepository(Thumbnail).save(thumbnail);
- // 🔄 Reload with full relations inside the same transaction
- const fullThumbnail = await manager.getRepository(Thumbnail).findOne({
-  where: { id: savedThumbnail.id },
-  relations: [
-  "creator", "tournament"
-  ],
-});
-
-
-  return {
-    message: "You have successfully joined the tournament!",
-    thumbnail:fullThumbnail!,
-  };
-});
-
-}
-
-
-private extractYouTubeVideoId(url: string): string | null {
-  const match = url.match(/(?:youtube\.com\/.*v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
-  return match ? match[1] : null
-}
-
-async getUserDashboard( tournamentId: number,userId: number): Promise<any> {
-  this.logger.log(`Fetching user dashboard for tournament ${tournamentId}, user ${userId}.`)
-  const tournament = await this.tournamentRepo.findOne({
-    where: { id: tournamentId },
-    relations: [   "participants",        
-     
-      "createdBy",
-      "community",],
-  })
-  if (!tournament) {
-    this.logger.error(`Tournament ${tournamentId} not found for user dashboard.`)
-    throw new NotFoundException("Tournament not found")
-  }
-  this.logger.log(`Tournament ${tournament.id} found.`)
-
-  const battles = await this.battleRepo.find({
-    where: { tournament: { id: tournamentId } },
-    relations: ["thumbnailA", "thumbnailB", "thumbnailA.creator", "thumbnailB.creator", "winnerUser"],
-  })
-  this.logger.log(`Found ${battles.length} battles for tournament ${tournamentId}.`)
-
-  // Fetch real-time vote counts for each battle using the new getVotesForBattle
-  const battlesWithRealtimeVotes = await Promise.all(
-    battles.map(async (battle) => {
-      if (battle.isByeBattle) {
-        return { ...battle, votesA: 0, votesB: 0 } // Bye battles have no votes
+  async joinTournament(
+    tournamentId: number,
+    user: User,
+    youtubeAccessToken: string,
+    thumbnailUrl: string,
+  ): Promise<{ message: string; thumbnail: Thumbnail }> {
+    // Basic validations (unchanged)
+    const baseTournament = await this.tournamentRepo.findOne({
+      where: { id: tournamentId },
+      relations: ['participants'],
+    });
+    if (!baseTournament) throw new NotFoundException('Tournament not found');
+    if (
+      [TournamentStatus.CANCELLED, TournamentStatus.CONCLUDED].includes(
+        baseTournament.status,
+      )
+    ) {
+      throw new BadRequestException('This tournament cannot be joined.');
+    }
+    const now = new Date();
+    if (isBefore(now, new Date(baseTournament.startDate))) {
+      throw new BadRequestException('Tournament has not started yet.');
+    }
+    if (
+      baseTournament.registrationDeadline &&
+      isAfter(now, new Date(baseTournament.registrationDeadline))
+    ) {
+      throw new BadRequestException(
+        'Registration for this tournament has closed.',
+      );
+    }
+    if (
+      baseTournament.maxParticipants &&
+      baseTournament.participants.length >= baseTournament.maxParticipants
+    ) {
+      throw new BadRequestException('This tournament is full.');
+    }
+    if (baseTournament.accessType === 'invite-only')
+      throw new ForbiddenException('Invite-only tournament.');
+    if (baseTournament.accessType === 'restricted') {
+      const criteria = baseTournament.accessCriteria;
+      const youtubeData =
+        await this.authService.fetchYouTubeChannelData(youtubeAccessToken);
+      if (!youtubeData)
+        throw new BadRequestException('Unable to fetch YouTube data.');
+      const subscribers = parseInt(youtubeData.subscribers || '0', 10);
+      const arenaPoints = user.arenaPoints ?? 0;
+      const elo = user.elo ?? 0;
+      if (criteria?.minSubscribers && subscribers < criteria.minSubscribers) {
+        throw new BadRequestException(
+          `You need at least ${criteria.minSubscribers} subscribers.`,
+        );
       }
-      const { votesA, votesB } = await this.voteService.getVotesForBattle(battle.id)
-      return { ...battle, votesA, votesB }
-    }),
-  )
-
-  const userBattles = battlesWithRealtimeVotes.filter(
-    (b) => b.thumbnailA.creator.id === userId || b.thumbnailB?.creator.id === userId,
-  )
-  this.logger.log(`Found ${userBattles.length} battles involving user ${userId}.`)
-
-  // Dynamically determine active round based on current time
-  const now = new Date()
-  const activeRound = tournament.rounds?.find((r) => {
-    // Added optional chaining
-    const start = new Date(r.roundStartDate)
-    const end = new Date(r.roundEndDate)
-    return now >= start && now <= end
-  })
-  this.logger.log(`Active Round: ${activeRound?.roundNumber || "None"}, ${activeRound?.battleName || "N/A"}`)
-
-  let currentBattleInfo: {
-    title: string
-    description: string
-    deadline: string | null
-    status: string
-    opponent?: string
-    battleId?: number
-    requiresSubmission?: boolean
-    isByeBattle?: boolean
-  } | null = null
-  let currentBattle: Battle | null = null
-
-  if (activeRound) {
-    // Find an active battle for the user that is not yet resolved
-    currentBattle = userBattles.find((b) => b?.roundNumber === activeRound?.roundNumber && !b.winnerUser) ?? null
-    if (currentBattle) {
-      // If it's a bye battle, the opponent is "N/A" or similar
-      const opponent = currentBattle.isByeBattle
-        ? "N/A (Bye)"
-        : currentBattle.thumbnailA.creator.id === userId
-          ? currentBattle.thumbnailB?.creator.username || currentBattle.thumbnailB?.creator.name
-          : currentBattle.thumbnailA.creator.username || currentBattle.thumbnailA.creator.name
-      this.logger.log("🎯 Current Battle Found:", currentBattle.id, "vs", opponent)
-      currentBattleInfo = {
-        title: `Battle #${currentBattle.roundNumber}`,
-        description: activeRound.focus ?? "Tournament battle in progress", // Changed to focus
-        deadline: activeRound.roundEndDate ? new Date(activeRound.roundEndDate).toISOString() : null,
-        status: "active",
-        opponent,
-        battleId: currentBattle.id,
-        requiresSubmission: !currentBattle.isByeBattle, // Bye battles don't require submission
-        isByeBattle: currentBattle.isByeBattle,
+      if (criteria?.minArenaPoints && arenaPoints < criteria.minArenaPoints) {
+        throw new BadRequestException(
+          `You need at least ${criteria.minArenaPoints} arena points.`,
+        );
       }
-    } else {
-      this.logger.log("⚠️ No active battle found for user in round", activeRound.roundNumber)
-      currentBattleInfo = {
-        title: activeRound.battleName ?? `Round #${activeRound.roundNumber}`,
-        description: activeRound.focus ?? "Waiting for pairing", // Changed to focus
-        deadline: activeRound.roundEndDate ? new Date(activeRound.roundEndDate).toISOString() : null,
-        status: "waiting",
-        requiresSubmission: false,
+      if (criteria?.minElo && elo < criteria.minElo) {
+        throw new BadRequestException(
+          `You need at least ${criteria.minElo} ELO.`,
+        );
       }
     }
+
+    // URL validation + normalization (unchanged)
+    if (!thumbnailUrl || thumbnailUrl.trim() === '') {
+      throw new BadRequestException('A thumbnail URL is required.');
+    }
+    const isYouTubeUrl =
+      /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//.test(thumbnailUrl);
+    const isImageUrl = /\.(jpeg|jpg|gif|png|webp)$/.test(thumbnailUrl);
+    if (!isYouTubeUrl && !isImageUrl)
+      throw new BadRequestException('Invalid thumbnail URL.');
+    let finalImageUrl = thumbnailUrl;
+    if (isYouTubeUrl) {
+      const videoId = this.extractYouTubeVideoId(thumbnailUrl);
+      if (!videoId)
+        throw new BadRequestException('Invalid YouTube URL format.');
+      finalImageUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+    }
+
+    // All DB writes in ONE transaction with the SAME manager
+    return this.dataSource.transaction(async (m) => {
+      const tRepo = m.getRepository(Tournament);
+      const thumbRepo = m.getRepository(Thumbnail);
+
+      // Reload tournament inside TX (with participants)
+      const tournament = await tRepo.findOne({
+        where: { id: tournamentId },
+        relations: ['participants'],
+      });
+      if (!tournament) throw new NotFoundException('Tournament not found');
+
+      // If user already joined, return existing thumbnail
+      const alreadyJoined = tournament.participants?.some(
+        (p) => p.id === user.id,
+      );
+      if (alreadyJoined) {
+        const existingThumb = await thumbRepo.findOne({
+          where: {
+            creator: { id: user.id },
+            tournament: { id: tournament.id },
+          },
+          relations: ['creator', 'tournament'],
+        });
+        if (!existingThumb)
+          throw new BadRequestException(
+            'You already joined, but your thumbnail is missing.',
+          );
+        return {
+          message: 'You have already joined this tournament!',
+          thumbnail: existingThumb,
+        };
+      }
+
+      // Ensure no duplicate thumbnail for this user in this tournament (race-safe)
+      const duplicate = await thumbRepo.findOne({
+        where: { tournament: { id: tournament.id }, creator: { id: user.id } },
+      });
+      if (duplicate)
+        throw new BadRequestException(
+          'You already uploaded a thumbnail for this tournament.',
+        );
+
+      // 1) Create & SAVE thumbnail FIRST (prevents later saves from nulling FK)
+      const thumbnail = thumbRepo.create({
+        imageUrl: finalImageUrl,
+        title: `Thumbnail for ${user.username || user.email}`,
+        creator: { id: user.id } as User,
+        tournament: { id: tournament.id } as Tournament,
+        tournamentId: tournament.id,
+      });
+      const savedThumbnail = await thumbRepo.save(thumbnail);
+
+      // 2) Add participant and SAVE tournament (participants array may be undefined)
+      tournament.participants = [
+        ...(tournament.participants || []),
+        { id: user.id } as User,
+      ];
+      await tRepo.save(tournament);
+
+      // 3) Reload thumbnail with relations to return a rich object
+      const fullThumbnail = await thumbRepo.findOne({
+        where: { id: savedThumbnail.id },
+        relations: ['creator', 'tournament'],
+      });
+
+      return {
+        message: 'You have successfully joined the tournament!',
+        thumbnail: fullThumbnail!,
+      };
+    });
   }
 
-  // --- NEW LOGIC FOR NEXT UPCOMING BATTLE ---
-  let nextUpcomingBattle: {
-    roundNumber: number
-    roundName: string
-    opponent?: string
-    startDate: string
-    battleId?: number
-    isByeBattle?: boolean
-  } | null = null
+  private extractYouTubeVideoId(url: string): string | null {
+    const match = url.match(
+      /(?:youtube\.com\/.*v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    );
+    return match ? match[1] : null;
+  }
 
-  // Sort rounds by start date to find the next one chronologically
-  const sortedRounds = [...(tournament.rounds || [])].sort(
-    (a, b) => new Date(a.roundStartDate).getTime() - new Date(b.roundStartDate).getTime(),
-  )
+  async getUserDashboard(tournamentId: number, userId: number): Promise<any> {
+    this.logger.log(
+      `Fetching user dashboard for tournament ${tournamentId}, user ${userId}.`,
+    );
+    const tournament = await this.tournamentRepo.findOne({
+      where: { id: tournamentId },
+      relations: ['participants', 'createdBy', 'community'],
+    });
+    if (!tournament) {
+      this.logger.error(
+        `Tournament ${tournamentId} not found for user dashboard.`,
+      );
+      throw new NotFoundException('Tournament not found');
+    }
+    this.logger.log(`Tournament ${tournament.id} found.`);
 
-  for (const round of sortedRounds) {
-    const roundStartDate = new Date(round.roundStartDate)
-    const roundEndDate = new Date(round.roundEndDate)
+    const battles = await this.battleRepo.find({
+      where: { tournament: { id: tournamentId } },
+      relations: [
+        'thumbnailA',
+        'thumbnailB',
+        'thumbnailA.creator',
+        'thumbnailB.creator',
+        'winnerUser',
+      ],
+    });
+    this.logger.log(
+      `Found ${battles.length} battles for tournament ${tournamentId}.`,
+    );
 
+    // Fetch real-time vote counts for each battle using the new getVotesForBattle
+    const battlesWithRealtimeVotes = await Promise.all(
+      battles.map(async (battle) => {
+        if (battle.isByeBattle) {
+          return { ...battle, votesA: 0, votesB: 0 }; // Bye battles have no votes
+        }
+        const { votesA, votesB } = await this.voteService.getVotesForBattle(
+          battle.id,
+        );
+        return { ...battle, votesA, votesB };
+      }),
+    );
 
+    const userBattles = battlesWithRealtimeVotes.filter(
+      (b) =>
+        b.thumbnailA.creator.id === userId ||
+        b.thumbnailB?.creator.id === userId,
+    );
+    this.logger.log(
+      `Found ${userBattles.length} battles involving user ${userId}.`,
+    );
 
-    // If the round is upcoming or active (but not yet ended)
-    if (isBefore(now, roundEndDate) || isEqual(now, roundEndDate)) {
-      // Find a battle for the current user in this round that is not yet completed
-      const userBattleInRound = userBattles.find((b) => b.roundNumber === round.roundNumber && !b.winnerUser)
-      if (userBattleInRound) {
-        // Found the next battle for the user
-        const opponent = userBattleInRound.isByeBattle
-          ? "N/A (Bye)"
-          : userBattleInRound.thumbnailA.creator.id === userId
-            ? userBattleInRound.thumbnailB?.creator.username || userBattleInRound.thumbnailB?.creator.name
-            : userBattleInRound.thumbnailA.creator.username || userBattleInRound.thumbnailA.creator.name
-        nextUpcomingBattle = {
-          roundNumber: round.roundNumber,
-          roundName: round.battleName || `Round ${round.roundNumber}`,
+    // Dynamically determine active round based on current time
+    const now = new Date();
+    const activeRound = tournament.rounds?.find((r) => {
+      // Added optional chaining
+      const start = new Date(r.roundStartDate);
+      const end = new Date(r.roundEndDate);
+      return now >= start && now <= end;
+    });
+    this.logger.log(
+      `Active Round: ${activeRound?.roundNumber || 'None'}, ${activeRound?.battleName || 'N/A'}`,
+    );
+
+    let currentBattleInfo: {
+      title: string;
+      description: string;
+      deadline: string | null;
+      status: string;
+      opponent?: string;
+      battleId?: number;
+      requiresSubmission?: boolean;
+      isByeBattle?: boolean;
+    } | null = null;
+    let currentBattle: Battle | null = null;
+
+    if (activeRound) {
+      // Find an active battle for the user that is not yet resolved
+      currentBattle =
+        userBattles.find(
+          (b) => b?.roundNumber === activeRound?.roundNumber && !b.winnerUser,
+        ) ?? null;
+      if (currentBattle) {
+        // If it's a bye battle, the opponent is "N/A" or similar
+        const opponent = currentBattle.isByeBattle
+          ? 'N/A (Bye)'
+          : currentBattle.thumbnailA.creator.id === userId
+            ? currentBattle.thumbnailB?.creator.username ||
+              currentBattle.thumbnailB?.creator.name
+            : currentBattle.thumbnailA.creator.username ||
+              currentBattle.thumbnailA.creator.name;
+        this.logger.log(
+          '🎯 Current Battle Found:',
+          currentBattle.id,
+          'vs',
           opponent,
-          startDate: roundStartDate.toISOString(),
-          battleId: userBattleInRound.id,
-          isByeBattle: userBattleInRound.isByeBattle,
-        }
+        );
+        currentBattleInfo = {
+          title: `Battle #${currentBattle.roundNumber}`,
+          description: activeRound.focus ?? 'Tournament battle in progress', // Changed to focus
+          deadline: activeRound.roundEndDate
+            ? new Date(activeRound.roundEndDate).toISOString()
+            : null,
+          status: 'active',
+          opponent,
+          battleId: currentBattle.id,
+          requiresSubmission: !currentBattle.isByeBattle, // Bye battles don't require submission
+          isByeBattle: currentBattle.isByeBattle,
+        };
+      } else {
         this.logger.log(
-          `Next upcoming battle found for user ${userId}: Round ${nextUpcomingBattle.roundNumber} vs ${nextUpcomingBattle.opponent}`,
-        )
-        break
-      } else if (isBefore(now, roundStartDate) && !userBattleInRound) {
-        // If the round is upcoming and no battle is assigned yet,
-        // it means battles for this round haven't been generated or assigned.
-        // We can still inform the user about the upcoming round.
-        nextUpcomingBattle = {
-          roundNumber: round.roundNumber,
-          roundName: round.battleName || `Round ${round.roundNumber}`,
-          startDate: roundStartDate.toISOString(),
-          // No opponent or battleId yet as battle hasn't been created/assigned
-        }
-        this.logger.log(
-          `Next upcoming round for user ${userId} is ${nextUpcomingBattle.roundNumber}, battles not yet generated.`,
-        )
-        break
+          '⚠️ No active battle found for user in round',
+          activeRound.roundNumber,
+        );
+        currentBattleInfo = {
+          title: activeRound.battleName ?? `Round #${activeRound.roundNumber}`,
+          description: activeRound.focus ?? 'Waiting for pairing', // Changed to focus
+          deadline: activeRound.roundEndDate
+            ? new Date(activeRound.roundEndDate).toISOString()
+            : null,
+          status: 'waiting',
+          requiresSubmission: false,
+        };
       }
     }
-  }
-  // For a 2-participant tournament, there should be NO next upcoming battle
-// because Round 1 is the final battle
-if (tournament.participants.length === 2 && activeRound?.roundNumber === 1) {
-  nextUpcomingBattle = null // No next battle - this IS the final
-  this.logger.log(`Tournament has only 2 participants. Round 1 is the final battle.`)
-}
 
-  // --- END NEW LOGIC ---
+    // --- NEW LOGIC FOR NEXT UPCOMING BATTLE ---
+    let nextUpcomingBattle: {
+      roundNumber: number;
+      roundName: string;
+      opponent?: string;
+      startDate: string;
+      battleId?: number;
+      isByeBattle?: boolean;
+    } | null = null;
 
-  const wins = userBattles.filter((b) => b.winnerUser?.id === userId).length
-  const losses = userBattles.filter(
-    (b) =>
-      b.winnerUser &&
-      b.winnerUser.id !== userId &&
-      (b.thumbnailA.creator.id === userId || b.thumbnailB?.creator.id === userId),
-  ).length
-  const totalBattles = userBattles.length
-  const winRate = totalBattles > 0 ? Math.round((wins / totalBattles) * 100) : 0
-  this.logger.log(
-    `User ${userId} stats: Wins ${wins}, Losses ${losses}, Total Battles ${totalBattles}, Win Rate ${winRate}%`,
-  )
+    // Sort rounds by start date to find the next one chronologically
+    const sortedRounds = [...(tournament.rounds || [])].sort(
+      (a, b) =>
+        new Date(a.roundStartDate).getTime() -
+        new Date(b.roundStartDate).getTime(),
+    );
 
-  const userEntity = await this.userRepo.findOneOrFail({ where: { id: userId } })
-  const participantIds = tournament.participants.map((p) => p.id)
-  const leaderboardUsers = await this.userRepo.find({
-    where: { id: In(participantIds) },
-    order: { arenaPoints: "DESC" },
-    take: 20,
-    relations: ["youtubeProfile"], // Load youtubeProfile for avatar
-  })
-  this.logger.log(`Generated leaderboard for ${leaderboardUsers.length} participants.`)
+    for (const round of sortedRounds) {
+      const roundStartDate = new Date(round.roundStartDate);
+      const roundEndDate = new Date(round.roundEndDate);
 
-  const leaderboard = leaderboardUsers.map((u, index) => ({
-    rank: index + 1,
-    username: u.username || u.name,
-    avatar: u.youtubeProfile?.thumbnail || null,
-    wins: battlesWithRealtimeVotes.filter((b) => b.winnerUser?.id === u.id).length,
-    losses: battlesWithRealtimeVotes.filter(
+      // If the round is upcoming or active (but not yet ended)
+      if (isBefore(now, roundEndDate) || isEqual(now, roundEndDate)) {
+        // Find a battle for the current user in this round that is not yet completed
+        const userBattleInRound = userBattles.find(
+          (b) => b.roundNumber === round.roundNumber && !b.winnerUser,
+        );
+        if (userBattleInRound) {
+          // Found the next battle for the user
+          const opponent = userBattleInRound.isByeBattle
+            ? 'N/A (Bye)'
+            : userBattleInRound.thumbnailA.creator.id === userId
+              ? userBattleInRound.thumbnailB?.creator.username ||
+                userBattleInRound.thumbnailB?.creator.name
+              : userBattleInRound.thumbnailA.creator.username ||
+                userBattleInRound.thumbnailA.creator.name;
+          nextUpcomingBattle = {
+            roundNumber: round.roundNumber,
+            roundName: round.battleName || `Round ${round.roundNumber}`,
+            opponent,
+            startDate: roundStartDate.toISOString(),
+            battleId: userBattleInRound.id,
+            isByeBattle: userBattleInRound.isByeBattle,
+          };
+          this.logger.log(
+            `Next upcoming battle found for user ${userId}: Round ${nextUpcomingBattle.roundNumber} vs ${nextUpcomingBattle.opponent}`,
+          );
+          break;
+        } else if (isBefore(now, roundStartDate) && !userBattleInRound) {
+          // If the round is upcoming and no battle is assigned yet,
+          // it means battles for this round haven't been generated or assigned.
+          // We can still inform the user about the upcoming round.
+          nextUpcomingBattle = {
+            roundNumber: round.roundNumber,
+            roundName: round.battleName || `Round ${round.roundNumber}`,
+            startDate: roundStartDate.toISOString(),
+            // No opponent or battleId yet as battle hasn't been created/assigned
+          };
+          this.logger.log(
+            `Next upcoming round for user ${userId} is ${nextUpcomingBattle.roundNumber}, battles not yet generated.`,
+          );
+          break;
+        }
+      }
+    }
+    // For a 2-participant tournament, there should be NO next upcoming battle
+    // because Round 1 is the final battle
+    if (
+      tournament.participants.length === 2 &&
+      activeRound?.roundNumber === 1
+    ) {
+      nextUpcomingBattle = null; // No next battle - this IS the final
+      this.logger.log(
+        `Tournament has only 2 participants. Round 1 is the final battle.`,
+      );
+    }
+
+    // --- END NEW LOGIC ---
+
+    const wins = userBattles.filter((b) => b.winnerUser?.id === userId).length;
+    const losses = userBattles.filter(
       (b) =>
         b.winnerUser &&
-        b.winnerUser.id !== u.id &&
-        (b.thumbnailA.creator.id === u.id || b.thumbnailB?.creator.id === u.id),
-    ).length,
-    score: u.arenaPoints,
-    isCurrentUser: u.id === userId,
-  }))
+        b.winnerUser.id !== userId &&
+        (b.thumbnailA.creator.id === userId ||
+          b.thumbnailB?.creator.id === userId),
+    ).length;
+    const totalBattles = userBattles.length;
+    const winRate =
+      totalBattles > 0 ? Math.round((wins / totalBattles) * 100) : 0;
+    this.logger.log(
+      `User ${userId} stats: Wins ${wins}, Losses ${losses}, Total Battles ${totalBattles}, Win Rate ${winRate}%`,
+    );
 
-  const userStats = {
-    rank: leaderboard.find((entry) => entry.isCurrentUser),
-    wins,
-    losses,
-    winRate,
-    arenaPoints: userEntity.arenaPoints,
-    battlesCompleted: wins + losses,
-    totalBattles,
+    const userEntity = await this.userRepo.findOneOrFail({
+      where: { id: userId },
+    });
+    const participantIds = tournament.participants.map((p) => p.id);
+    const leaderboardUsers = await this.userRepo.find({
+      where: { id: In(participantIds) },
+      order: { arenaPoints: 'DESC' },
+      take: 20,
+      relations: ['youtubeProfile'], // Load youtubeProfile for avatar
+    });
+    this.logger.log(
+      `Generated leaderboard for ${leaderboardUsers.length} participants.`,
+    );
+
+    const leaderboard = leaderboardUsers.map((u, index) => ({
+      rank: index + 1,
+      username: u.username || u.name,
+      avatar: u.youtubeProfile?.thumbnail || null,
+      wins: battlesWithRealtimeVotes.filter((b) => b.winnerUser?.id === u.id)
+        .length,
+      losses: battlesWithRealtimeVotes.filter(
+        (b) =>
+          b.winnerUser &&
+          b.winnerUser.id !== u.id &&
+          (b.thumbnailA.creator.id === u.id ||
+            b.thumbnailB?.creator.id === u.id),
+      ).length,
+      score: u.arenaPoints,
+      isCurrentUser: u.id === userId,
+    }));
+
+    const userStats = {
+      rank: leaderboard.find((entry) => entry.isCurrentUser),
+      wins,
+      losses,
+      winRate,
+      arenaPoints: userEntity.arenaPoints,
+      battlesCompleted: wins + losses,
+      totalBattles,
+    };
+    this.logger.log(`User stats for dashboard: ${JSON.stringify(userStats)}`);
+
+    const upcomingBattles = userBattles
+      .filter((b) => !b.winnerUser && b.id !== currentBattle?.id)
+      .map((b) => ({
+        round: b.roundNumber,
+        opponent: b.isByeBattle
+          ? 'N/A (Bye)'
+          : b.thumbnailA.creator.id === userId
+            ? b.thumbnailB?.creator.username || b.thumbnailB?.creator.name
+            : b.thumbnailA.creator.username || b.thumbnailA.creator.name,
+        date: b.createdAt.toDateString(),
+        status: 'active',
+        isByeBattle: b.isByeBattle,
+      }));
+    this.logger.log(
+      `Upcoming battles for user ${userId}: ${upcomingBattles.length}`,
+    );
+
+    const computedRounds = await Promise.all(
+      (tournament.rounds ?? []).map(async (round) => {
+        const start = new Date(round.roundStartDate);
+        const end = new Date(round.roundEndDate);
+        let status: 'upcoming' | 'active' | 'completed';
+        if (now < start) {
+          status = 'upcoming';
+        } else if (now > end) {
+          status = 'completed';
+        } else {
+          status = 'active';
+        }
+        const battleCount = await this.battleRepo.count({
+          where: {
+            tournament: { id: tournament.id },
+            roundNumber: round.roundNumber,
+          },
+        });
+        this.logger.log(
+          `🔄 Round ${round.roundNumber}: ${status} | Battles: ${battleCount}`,
+        );
+        return {
+          ...round,
+          status,
+          durationDays: differenceInDays(end, start),
+          hasBattles: battleCount > 0,
+        };
+      }),
+    );
+    this.logger.log(`Computed details for ${computedRounds.length} rounds.`);
+    console.log('🔍 DEBUG - User Battles:', userBattles.length);
+    console.log(
+      '🔍 DEBUG - Battles with winners:',
+      userBattles.filter((b) => b.winnerUser).length,
+    );
+    console.log('🔍 DEBUG - User wins:', wins);
+    console.log('🔍 DEBUG - User losses:', losses);
+    console.log('🔍 DEBUG - Total battles:', totalBattles);
+    console.log('🔍 DEBUG - Calculated win rate:', winRate);
+    return {
+      id: tournament.id,
+      title: tournament.title,
+      description: tournament.description,
+      startDate: tournament.startDate,
+      endDate: tournament.endDate,
+      format: tournament.format,
+      structure: tournament.structure,
+      category: tournament.category,
+      subcategory: tournament.subcategory,
+      accessType: tournament.accessType,
+      accessCriteria: tournament.accessCriteria,
+      TournamentRewards: tournament.TournamentRewards ?? [],
+      imageUrl: tournament.imageUrl,
+      registrationDeadline: tournament.registrationDeadline,
+      maxParticipants: tournament.maxParticipants,
+      createdAt: tournament.createdAt,
+      updatedAt: tournament.updatedAt,
+      participantCount: tournament.participants?.length ?? 0,
+      community: tournament.community,
+      rounds: computedRounds,
+      progress: {
+        totalRounds: computedRounds.length,
+        completedRounds: computedRounds.filter((r) => r.status === 'completed')
+          .length,
+        pendingRounds: computedRounds.filter((r) => r.status === 'upcoming')
+          .length,
+      },
+      participants: tournament.participants,
+      battles: battlesWithRealtimeVotes, // Return battles with real-time vote counts
+      currentBattle: currentBattleInfo,
+      userStats,
+      leaderboard,
+      upcomingBattles,
+      status: tournament.status,
+      nextUpcomingBattle,
+    };
   }
-  this.logger.log(`User stats for dashboard: ${JSON.stringify(userStats)}`)
 
-  const upcomingBattles = userBattles
-    .filter((b) => !b.winnerUser && b.id !== currentBattle?.id)
-    .map((b) => ({
-      round: b.roundNumber,
-      opponent: b.isByeBattle
-        ? "N/A (Bye)"
-        : b.thumbnailA.creator.id === userId
-          ? b.thumbnailB?.creator.username || b.thumbnailB?.creator.name
-          : b.thumbnailA.creator.username || b.thumbnailA.creator.name,
-      date: b.createdAt.toDateString(),
-      status: "active",
-      isByeBattle: b.isByeBattle,
-    }))
-  this.logger.log(`Upcoming battles for user ${userId}: ${upcomingBattles.length}`)
-
-  const computedRounds = await Promise.all(
-    (tournament.rounds ?? []).map(async (round) => {
-      const start = new Date(round.roundStartDate)
-      const end = new Date(round.roundEndDate)
-      let status: "upcoming" | "active" | "completed"
-      if (now < start) {
-        status = "upcoming"
-      } else if (now > end) {
-        status = "completed"
-      } else {
-        status = "active"
-      }
-      const battleCount = await this.battleRepo.count({
-        where: {
-          tournament: { id: tournament.id },
-          roundNumber: round.roundNumber,
-        },
-      })
-      this.logger.log(`🔄 Round ${round.roundNumber}: ${status} | Battles: ${battleCount}`)
-      return {
-        ...round,
-        status,
-        durationDays: differenceInDays(end, start),
-        hasBattles: battleCount > 0,
-      }
-    }),
-  )
-  this.logger.log(`Computed details for ${computedRounds.length} rounds.`)
-  console.log('🔍 DEBUG - User Battles:', userBattles.length)
-  console.log('🔍 DEBUG - Battles with winners:', userBattles.filter(b => b.winnerUser).length)
-  console.log('🔍 DEBUG - User wins:', wins)
-  console.log('🔍 DEBUG - User losses:', losses)
-  console.log('🔍 DEBUG - Total battles:', totalBattles)
-  console.log('🔍 DEBUG - Calculated win rate:', winRate)
-  return {
-    id: tournament.id,
-    title: tournament.title,
-    description: tournament.description,
-    startDate: tournament.startDate,
-    endDate: tournament.endDate,
-    format: tournament.format,
-    structure: tournament.structure,
-    category: tournament.category,
-    subcategory: tournament.subcategory,
-    accessType: tournament.accessType,
-    accessCriteria: tournament.accessCriteria,
-    TournamentRewards: tournament.TournamentRewards ?? [],
-    imageUrl: tournament.imageUrl,
-    registrationDeadline: tournament.registrationDeadline,
-    maxParticipants: tournament.maxParticipants,
-    createdAt: tournament.createdAt,
-    updatedAt: tournament.updatedAt,
-    participantCount: tournament.participants?.length ?? 0,
-    community: tournament.community,
-    rounds: computedRounds,
-    progress: {
-      totalRounds: computedRounds.length,
-      completedRounds: computedRounds.filter((r) => r.status === "completed").length,
-      pendingRounds: computedRounds.filter((r) => r.status === "upcoming").length,
-    },
-    participants: tournament.participants,
-    battles: battlesWithRealtimeVotes, // Return battles with real-time vote counts
-    currentBattle: currentBattleInfo,
-    userStats,
-    leaderboard,
-    upcomingBattles,
-    status: tournament.status,
-    nextUpcomingBattle,
+  async updateTournamentStatus(
+    tournamentId: number,
+    newStatus: TournamentStatus,
+  ): Promise<Tournament> {
+    this.logger.log(
+      `Attempting to update tournament ${tournamentId} status to ${newStatus}.`,
+    );
+    const tournament = await this.tournamentRepo.findOne({
+      where: { id: tournamentId },
+    });
+    if (!tournament) {
+      this.logger.error(
+        `Tournament ${tournamentId} not found for status update.`,
+      );
+      throw new NotFoundException(
+        `Tournament with ID ${tournamentId} not found`,
+      );
+    }
+    this.logger.log(
+      `Tournament ${tournament.id} status changing from ${tournament.status} to ${newStatus}.`,
+    );
+    tournament.status = newStatus;
+    return this.tournamentRepo.save(tournament);
   }
-}
-
-async updateTournamentStatus(tournamentId: number, newStatus: TournamentStatus): Promise<Tournament> {
-  this.logger.log(`Attempting to update tournament ${tournamentId} status to ${newStatus}.`)
-  const tournament = await this.tournamentRepo.findOne({
-    where: { id: tournamentId },
-  })
-  if (!tournament) {
-    this.logger.error(`Tournament ${tournamentId} not found for status update.`)
-    throw new NotFoundException(`Tournament with ID ${tournamentId} not found`)
-  }
-  this.logger.log(`Tournament ${tournament.id} status changing from ${tournament.status} to ${newStatus}.`)
-  tournament.status = newStatus
-  return this.tournamentRepo.save(tournament)
-}
 }

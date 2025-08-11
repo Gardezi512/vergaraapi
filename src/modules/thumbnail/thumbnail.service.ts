@@ -1,11 +1,11 @@
 import {
-    BadRequestException,
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Thumbnail } from './entities/thumbnail.entity';
 import { CreateThumbnailDto } from './dto/create-thumbnail.dto';
 import { User } from 'src/modules/auth/entities/user.entity';
@@ -20,62 +20,19 @@ export class ThumbnailService {
     private readonly tournamentRepo: Repository<Tournament>,
   ) {}
 
-  // async create(dto: CreateThumbnailDto, user: User): Promise<Thumbnail> {
-  //   const tournament = await this.tournamentRepo.findOne({
-  //     where: { id: dto.tournamentId },
-  //     relations: ['community', 'community.members', 'participants'],
-  //   });
-
-  //   if (!tournament) throw new NotFoundException('Tournament not found');
-
-  //   // Check community membership
-  //   // const isCommunityMember = tournament.community.members.some(
-  //   //   (member) => member.id === user.id,
-  //   // );
-  //   // if (!isCommunityMember) {
-  //   //   throw new ForbiddenException('Join the community before submitting.');
-  //   // }
-
-  //   // Check tournament membership
-  //   const isParticipant = tournament.participants.some(
-  //     (participant) => participant.id === user.id,
-  //   );
-  //   if (!isParticipant) {
-  //     throw new ForbiddenException('Join the tournament before submitting.');
-  //   }
-
-  //   // Check if already uploaded for this tournament
-  //   const existing = await this.thumbnailRepo.findOne({
-  //     where: { tournament: { id: tournament.id }, creator: { id: user.id } },
-  //   });
-  //   if (existing) {
-  //     throw new BadRequestException(
-  //       'You already uploaded a thumbnail for this tournament.',
-  //     );
-  //   }
-
-  //   // Create thumbnail
-  //   const thumbnail = this.thumbnailRepo.create({
-  //     imageUrl: dto.imageUrl,
-  //     title: dto.title,
-  //     creator: user,
-  //     tournament,
-  //   });
-
-  //   return this.thumbnailRepo.save(thumbnail);
-  // }
   async create(dto: CreateThumbnailDto, user: User): Promise<Thumbnail> {
     if (!dto.tournamentId) {
-      throw new BadRequestException("Tournament ID is required for thumbnail creation.");
+      throw new BadRequestException(
+        'Tournament ID is required for thumbnail creation.',
+      );
     }
-  
+
     const tournament = await this.tournamentRepo.findOne({
       where: { id: dto.tournamentId },
       relations: ['community', 'community.members', 'participants'],
     });
-  
+
     if (!tournament) throw new NotFoundException('Tournament not found');
-  
 
     const existing = await this.thumbnailRepo.findOne({
       where: { tournament: { id: tournament.id }, creator: { id: user.id } },
@@ -85,19 +42,56 @@ export class ThumbnailService {
         'You already uploaded a thumbnail for this tournament.',
       );
     }
-  
+
     const thumbnail = this.thumbnailRepo.create({
       imageUrl: dto.imageUrl,
-      
-      title: dto.title ?? `Thumbnail for ${user.username ||  user.name || user.email}`,
+
+      title:
+        dto.title ??
+        `Thumbnail for ${user.username || user.name || user.email}`,
       creator: { id: user.id } as User,
       tournament,
       tournamentId: tournament.id, // <-- ensures FK is always persisted
     });
-  
+
     return this.thumbnailRepo.save(thumbnail);
   }
-  
+
+  async createInTx(
+    m: EntityManager,
+    dto: CreateThumbnailDto,
+    user: User,
+  ): Promise<Thumbnail> {
+    if (!dto.tournamentId)
+      throw new BadRequestException('Tournament ID is required');
+
+    const tRepo = m.getRepository(Tournament);
+    const thumbRepo = m.getRepository(Thumbnail);
+
+    const tournament = await tRepo.findOne({
+      where: { id: dto.tournamentId },
+    });
+    if (!tournament) throw new NotFoundException('Tournament not found');
+
+    const existing = await thumbRepo.findOne({
+      where: { tournament: { id: tournament.id }, creator: { id: user.id } },
+    });
+    if (existing)
+      throw new BadRequestException(
+        'You already uploaded a thumbnail for this tournament.',
+      );
+
+    const thumbnail = thumbRepo.create({
+      imageUrl: dto.imageUrl,
+      title:
+        dto.title ??
+        `Thumbnail for ${user.username || user.name || user.email}`,
+      creator: { id: user.id } as User,
+      tournament,
+      tournamentId: tournament.id,
+    });
+    return thumbRepo.save(thumbnail);
+  }
 
   async update(
     id: number,
