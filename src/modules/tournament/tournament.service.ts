@@ -9,7 +9,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { BattleRound, Tournament, TournamentStatus } from './entities/tournament.entity';
 import { Community } from 'src/modules/community/entities/community.entity';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
@@ -47,6 +47,7 @@ export class TournamentService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly authService: UsersService,
+    private readonly dataSource: DataSource, // ✅ inject DataSource
    
     
   ) {}
@@ -446,24 +447,35 @@ async joinTournament(
     finalImageUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
   }
 
-  // ✅ Save thumbnail first
-  const savedThumbnail = await this.thumbnailService.create(
-    {
-      tournamentId,
-      imageUrl: finalImageUrl,
-      title: `Thumbnail for ${user.username || user.email}`,
-    },
-    user,
-  );
+// Save thumbnail inside transaction with participant join
+return await this.dataSource.transaction(async manager => {
+   // ✅ Create thumbnail using transactional manager
+   const thumbnail = manager.getRepository(Thumbnail).create({
+    tournament: { id: tournament.id } as Tournament,
+    tournamentId: tournament.id,
+    imageUrl: finalImageUrl,
+    title: `Thumbnail for ${user.username || user.email}`,
+    creator: { id: user.id } as User,
+  });
+  tournament.participants.push({ id: user.id } as User);
+  await manager.getRepository(Tournament).save(tournament);
+  
+ const savedThumbnail = await manager.getRepository(Thumbnail).save(thumbnail);
+ // 🔄 Reload with full relations inside the same transaction
+ const fullThumbnail = await manager.getRepository(Thumbnail).findOne({
+  where: { id: savedThumbnail.id },
+  relations: [
+  "creator", "tournament"
+  ],
+});
 
-  // ✅ Then add participant
-  tournament.participants.push(user);
-  await this.tournamentRepo.save(tournament);
 
   return {
     message: "You have successfully joined the tournament!",
-    thumbnail: savedThumbnail,
+    thumbnail:fullThumbnail!,
   };
+});
+
 }
 
 
@@ -583,6 +595,8 @@ async getUserDashboard( tournamentId: number,userId: number): Promise<any> {
     const roundStartDate = new Date(round.roundStartDate)
     const roundEndDate = new Date(round.roundEndDate)
 
+
+
     // If the round is upcoming or active (but not yet ended)
     if (isBefore(now, roundEndDate) || isEqual(now, roundEndDate)) {
       // Find a battle for the current user in this round that is not yet completed
@@ -623,6 +637,13 @@ async getUserDashboard( tournamentId: number,userId: number): Promise<any> {
       }
     }
   }
+  // For a 2-participant tournament, there should be NO next upcoming battle
+// because Round 1 is the final battle
+if (tournament.participants.length === 2 && activeRound?.roundNumber === 1) {
+  nextUpcomingBattle = null // No next battle - this IS the final
+  this.logger.log(`Tournament has only 2 participants. Round 1 is the final battle.`)
+}
+
   // --- END NEW LOGIC ---
 
   const wins = userBattles.filter((b) => b.winnerUser?.id === userId).length
@@ -675,7 +696,7 @@ async getUserDashboard( tournamentId: number,userId: number): Promise<any> {
   this.logger.log(`User stats for dashboard: ${JSON.stringify(userStats)}`)
 
   const upcomingBattles = userBattles
-    .filter((b) => !b.winnerUser)
+    .filter((b) => !b.winnerUser && b.id !== currentBattle?.id)
     .map((b) => ({
       round: b.roundNumber,
       opponent: b.isByeBattle

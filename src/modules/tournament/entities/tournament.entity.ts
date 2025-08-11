@@ -106,7 +106,7 @@ export class Tournament {
     () => Thumbnail,
     (thumbnail) => thumbnail.tournament, // Added the inverse side for Thumbnail
     {
-      cascade: true,
+      cascade: false,
       eager: true,
     },
   )

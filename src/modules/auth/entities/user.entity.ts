@@ -4,6 +4,8 @@ import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
 import { Tournament } from 'src/modules/tournament/entities/tournament.entity';
 import { Vote } from 'src/modules/vote/entities/vote.entity';
 import { YouTubeProfile } from 'src/modules/youtubeprofile/entities/youtube.profile.entity';
+import { ArenaPointsTransaction } from '../../awards/entities/arena-points-transaction.entity';
+import { UserReward } from '../../awards/entities/user-reward.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -69,4 +71,23 @@ tournaments?: Tournament[]
     (vote) => vote.voter,
   )
   votes: Vote[]
+  @OneToMany(() => ArenaPointsTransaction, (transaction) => transaction.user)
+arenaPointsTransactions: ArenaPointsTransaction[];
+
+@OneToMany(() => UserReward, (reward) => reward.user)
+rewards: UserReward[];
+
+// Add these fields for user statistics
+@Column({ default: 0 })
+winCount: number;
+
+@Column({ default: 0 })
+lossCount: number;
+
+@Column({ default: 0 })
+battleCount: number;
+
+@Column({ default: 0 })
+tournamentWins: number;
+  
 }

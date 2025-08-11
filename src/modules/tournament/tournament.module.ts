@@ -15,6 +15,7 @@ import { ThumbnailModule } from '../thumbnail/thumbnail.module';
 import { TournamentSchedulerService } from './tournament-scheduler.service'; // Import the new scheduler service
 import { VoteModule } from '../vote/vote.module';
 import { Vote } from '../vote/entities/vote.entity';
+import { AwardsModule } from '../awards/awards.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { Vote } from '../vote/entities/vote.entity';
     ThumbnailModule,
     VoteModule,
     forwardRef(() => BattleModule),
+    AwardsModule,
   ],
   providers: [TournamentService,TournamentSchedulerService],
   controllers: [TournamentController],

@@ -65,6 +65,10 @@ export class ThumbnailService {
   //   return this.thumbnailRepo.save(thumbnail);
   // }
   async create(dto: CreateThumbnailDto, user: User): Promise<Thumbnail> {
+    if (!dto.tournamentId) {
+      throw new BadRequestException("Tournament ID is required for thumbnail creation.");
+    }
+  
     const tournament = await this.tournamentRepo.findOne({
       where: { id: dto.tournamentId },
       relations: ['community', 'community.members', 'participants'],
@@ -72,14 +76,7 @@ export class ThumbnailService {
   
     if (!tournament) throw new NotFoundException('Tournament not found');
   
-    // REMOVE THIS PARTICIPANT CHECK, since joining happens after thumbnail upload
-    // const isParticipant = tournament.participants.some(
-    //   (participant) => participant.id === user.id,
-    // );
-    // if (!isParticipant) {
-    //   throw new ForbiddenException('Join the tournament before submitting.');
-    // }
-  
+
     const existing = await this.thumbnailRepo.findOne({
       where: { tournament: { id: tournament.id }, creator: { id: user.id } },
     });
@@ -91,9 +88,11 @@ export class ThumbnailService {
   
     const thumbnail = this.thumbnailRepo.create({
       imageUrl: dto.imageUrl,
-      title: dto.title ?? `Thumbnail for ${user.username || user.email}`,
-      creator: user,
+      
+      title: dto.title ?? `Thumbnail for ${user.username ||  user.name || user.email}`,
+      creator: { id: user.id } as User,
       tournament,
+      tournamentId: tournament.id, // <-- ensures FK is always persisted
     });
   
     return this.thumbnailRepo.save(thumbnail);

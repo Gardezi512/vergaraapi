@@ -9,10 +9,14 @@ import { Vote } from '../vote/entities/vote.entity';
 import { VoteService } from '../vote/vote.service';
 import { VoteController } from '../vote/vote.controller';
 import { TournamentModule } from '../tournament/tournament.module';
+import { AwardsModule } from '../awards/awards.module';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Battle, Thumbnail, User, Vote]),
-    forwardRef(() => TournamentModule),], 
+    imports: [
+    TypeOrmModule.forFeature([Battle, Thumbnail, User, Vote]),
+    forwardRef(() => TournamentModule),
+    AwardsModule,
+], 
     providers: [BattleService, VoteService],
     exports: [BattleService], 
     controllers: [BattleController, VoteController],

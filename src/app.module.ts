@@ -10,6 +10,7 @@ import { ThumbnailModule } from './modules/thumbnail/thumbnail.module';
 import { BattleModule } from './modules/battle/battle.module';
 import { LeaderboardModule } from './modules/leaderboard/leaderboard.module';
 import { ScheduleModule } from '@nestjs/schedule'; // Import ScheduleModule
+import { AwardsModule } from './modules/awards/awards.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ScheduleModule } from '@nestjs/schedule'; // Import ScheduleModule
     UsersModule,
     CommunityModule,
     TournamentModule,
+    AwardsModule,
     ThumbnailModule, BattleModule, LeaderboardModule,
   ],
   controllers: [AppController],
