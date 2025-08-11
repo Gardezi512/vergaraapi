@@ -56,9 +56,14 @@ export class BattleService {
       .getRepository(Tournament)
       .findOne({
         where: { id: dto.tournamentId },
+        relations: ['createdBy'], // <-- make sure we fetch the owner
       });
     if (!tournament) throw new NotFoundException('Tournament not found');
-
+    if (!tournament.createdBy) {
+      throw new BadRequestException(
+        'Tournament does not have a valid creator assigned.'
+      );
+    }
     const round = tournament.rounds?.find(
       (r) => r.roundNumber === dto.roundNumber,
     );
@@ -84,7 +89,8 @@ export class BattleService {
       thumbnailB: isBye ? null : thumbnailB,
       tournament,
       roundNumber: dto.roundNumber,
-      createdBy: user,
+      
+      createdBy: { id: tournament.createdBy.id } as User, // ✅ safest way to set relation
       isByeBattle: isBye,
       ...(isBye
         ? { status: BattleStatus.COMPLETED, winnerUser: thumbnailA.creator }

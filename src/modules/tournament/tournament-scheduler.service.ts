@@ -4,11 +4,13 @@ import { TournamentService } from './tournament.service';
 import { BattleService } from '../battle/battle.service';
 import { TournamentStatus } from './entities/tournament.entity';
 import { isAfter, isEqual, isBefore } from 'date-fns';
-import type { User } from 'src/modules/auth/entities/user.entity';
+import { User } from 'src/modules/auth/entities/user.entity';
 import { BattleStatus } from '../battle/entities/battle.entity';
 import { ArenaPointsService } from '../awards/services/arena-points.service';
 import { RewardService } from '../awards/services/reward.service';
 import { APTransactionType } from '../awards/entities/arena-points-transaction.entity';
+import { Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
 
 @Injectable()
 export class TournamentSchedulerService {
@@ -21,6 +23,9 @@ export class TournamentSchedulerService {
     private readonly battleService: BattleService,
     private readonly arenaPointsService: ArenaPointsService,
     private readonly rewardService: RewardService,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>, // ✅ now you can query users
+    
   ) {}
 
   /**
@@ -34,29 +39,29 @@ export class TournamentSchedulerService {
     const tournaments = await this.tournamentService.findAll();
     const now = new Date();
 
-    const systemUser: User = {
-      id: 0,
-      username: 'System',
-      email: 'system@example.com',
-      role: 'Admin',
-      name: 'System User',
-      joinedCommunities: [],
-      password: '',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      arenaPoints: 0,
-      elo: 0,
-      winCount: 0, // 🎯 ADD THIS
-      lossCount: 0, // 🎯 ADD THIS
-      battleCount: 0, // 🎯 ADD THIS
-      tournamentWins: 0, // 🎯 ADD THIS
-      youtubeProfile: undefined,
-      thumbnails: [], // 🎯 ADD THIS
-      votes: [], // 🎯 ADD THIS
-      tournaments: [], // 🎯 ADD THIS (if you have this relation)
-      arenaPointsTransactions: [], // 🎯 ADD THIS
-      rewards: [], // 🎯 ADD THIS
-    } as User;
+    // const systemUser: User = {
+    //   id: 0,
+    //   username: 'System',
+    //   email: 'system@example.com',
+    //   role: 'Admin',
+    //   name: 'System User',
+    //   joinedCommunities: [],
+    //   password: '',
+    //   createdAt: new Date(),
+    //   updatedAt: new Date(),
+    //   arenaPoints: 0,
+    //   elo: 0,
+    //   winCount: 0, // 🎯 ADD THIS
+    //   lossCount: 0, // 🎯 ADD THIS
+    //   battleCount: 0, // 🎯 ADD THIS
+    //   tournamentWins: 0, // 🎯 ADD THIS
+    //   youtubeProfile: undefined,
+    //   thumbnails: [], // 🎯 ADD THIS
+    //   votes: [], // 🎯 ADD THIS
+    //   tournaments: [], // 🎯 ADD THIS (if you have this relation)
+    //   arenaPointsTransactions: [], // 🎯 ADD THIS
+    //   rewards: [], // 🎯 ADD THIS
+    // } as User;
     for (const tournament of tournaments) {
       const registrationDeadline = tournament.registrationDeadline
         ? new Date(tournament.registrationDeadline)
@@ -97,6 +102,17 @@ export class TournamentSchedulerService {
         // Check if Round 1 battles already exist (idempotency)
         const existingBattlesCount =
           await this.battleService.countBattlesForRound(tournament.id, 1);
+
+                      // Fetch a real system user from DB
+let systemUser = await this.userRepo.findOne({
+  where: { email: 'system@example.com' },
+});
+
+if (!systemUser) {
+  // fallback: use tournament creator if system user doesn't exist
+  systemUser = tournament.createdBy;
+}
+  
         if (existingBattlesCount === 0) {
           try {
             this.logger.log(
@@ -105,7 +121,7 @@ export class TournamentSchedulerService {
             this.logger.log(
               `[Scheduler] Generating battles for Round 1 of tournament ${tournament.id}`,
             );
-            const generatedBattles =
+          const generatedBattles =
               await this.battleService.generateRandomBattlesForRound(
                 tournament.id,
                 1,
@@ -183,29 +199,29 @@ export class TournamentSchedulerService {
     const now = new Date();
 
     // Define a placeholder system user for battle creation
-    const systemUser: User = {
-      id: 0,
-      username: 'System',
-      email: 'system@example.com',
-      role: 'Admin',
-      name: 'System User',
-      joinedCommunities: [],
-      password: '',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      arenaPoints: 0,
-      elo: 0,
-      winCount: 0, // 🎯 ADD THIS
-      lossCount: 0, // 🎯 ADD THIS
-      battleCount: 0, // 🎯 ADD THIS
-      tournamentWins: 0, // 🎯 ADD THIS
-      youtubeProfile: undefined,
-      thumbnails: [], // 🎯 ADD THIS
-      votes: [], // 🎯 ADD THIS
-      tournaments: [], // 🎯 ADD THIS (if you have this relation)
-      arenaPointsTransactions: [], // 🎯 ADD THIS
-      rewards: [], // 🎯 ADD THIS
-    } as User;
+    // const systemUser: User = {
+    //   id: 0,
+    //   username: 'System',
+    //   email: 'system@example.com',
+    //   role: 'Admin',
+    //   name: 'System User',
+    //   joinedCommunities: [],
+    //   password: '',
+    //   createdAt: new Date(),
+    //   updatedAt: new Date(),
+    //   arenaPoints: 0,
+    //   elo: 0,
+    //   winCount: 0, // 🎯 ADD THIS
+    //   lossCount: 0, // 🎯 ADD THIS
+    //   battleCount: 0, // 🎯 ADD THIS
+    //   tournamentWins: 0, // 🎯 ADD THIS
+    //   youtubeProfile: undefined,
+    //   thumbnails: [], // 🎯 ADD THIS
+    //   votes: [], // 🎯 ADD THIS
+    //   tournaments: [], // 🎯 ADD THIS (if you have this relation)
+    //   arenaPointsTransactions: [], // 🎯 ADD THIS
+    //   rewards: [], // 🎯 ADD THIS
+    // } as User;
 
     for (const tournament of activeTournaments) {
       // 🎯 ADD: Safety check for tournament rounds
@@ -308,9 +324,7 @@ export class TournamentSchedulerService {
                 undefined,
                 currentRound.roundNumber,
               );
-              this.logger.log(
-                `[Scheduler] Awarded ${currentRoundConfig.rewards.arenaPoints} AP to ${winner.user.username || winner.user.name} for round completion`,
-              );
+          
             }
           }
 
@@ -360,6 +374,16 @@ export class TournamentSchedulerService {
               tournament.id,
               nextRoundNumber,
             );
+
+            // Fetch a real system user from DB
+let systemUser = await this.userRepo.findOne({
+  where: { email: 'system@example.com' },
+});
+
+if (!systemUser) {
+  // fallback: use tournament creator if system user doesn't exist
+  systemUser = tournament.createdBy;
+}
           if (existingNextRoundBattlesCount === 0) {
             try {
               this.logger.log(
