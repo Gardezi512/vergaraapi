@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -18,6 +18,7 @@ import { LoginUserDto } from './dto/auth-login-dto';
 import { OAuth2Client } from 'google-auth-library';
 import axios from 'axios';
 import { YouTubeProfile } from '../youtubeprofile/entities/youtube.profile.entity';
+import { Battle } from '../battle/entities/battle.entity';
 
 @Injectable()
 export class UsersService {
@@ -27,6 +28,8 @@ export class UsersService {
     private readonly jwtService: JwtService,
     @InjectRepository(YouTubeProfile)
     private readonly youtubeProfileRepo: Repository<YouTubeProfile>,
+    @InjectRepository(Battle) 
+    private readonly battleRepo: Repository<Battle>
   ) {}
 
   async create(data: CreateUserDto): Promise<User> {
@@ -86,7 +89,7 @@ export class UsersService {
   }
 
   async fetchYouTubeChannelData(accessToken: string) {
-    console.log('[YouTube] Fetching channel data with access token...');
+   
 
     try {
       const res = await axios.get(
@@ -111,7 +114,6 @@ export class UsersService {
         thumbnail: channel.snippet.thumbnails?.default?.url,
       };
 
-      console.log('[YouTube] Channel data fetched successfully:', youtubeInfo);
       return youtubeInfo;
     } catch (err) {
       console.error('[YouTube API ERROR]', err?.response?.data || err.message);
@@ -128,7 +130,7 @@ export class UsersService {
     accessToken: string;
     refreshToken?: string;
   }) {
-    console.log('[Google Login] Verifying token...');
+
 
     const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
     let ticket;
@@ -150,14 +152,13 @@ export class UsersService {
     }
 
     const { email, name } = payload;
-    console.log('[Google Login] User info from token:', { email, name });
+  
 
     // First: Try to fetch YouTube data
     let youtubeData = await this.fetchYouTubeChannelData(accessToken);
 
     // If token failed and refreshToken available, try to refresh
     if (!youtubeData && refreshToken) {
-      console.log('[Google Login] Trying token refresh...');
       try {
         const newAccessToken =
           await this.refreshYouTubeAccessToken(refreshToken);
@@ -182,8 +183,11 @@ export class UsersService {
     });
 
     if (!user) {
-      console.log('[Google Login] Creating new user...');
-      user = this.usersRepo.create({ email, name });
+      user = this.usersRepo.create({ email, name , avatar: youtubeData.thumbnail });
+      await this.usersRepo.save(user);
+    }
+    if (!user.avatar && youtubeData.thumbnail) {
+      user.avatar = youtubeData.thumbnail;
       await this.usersRepo.save(user);
     }
 
@@ -271,7 +275,6 @@ export class UsersService {
       );
 
       const newAccessToken = response.data.access_token;
-      console.log('[YouTube] Access token refreshed successfully.');
       return newAccessToken;
     } catch (error) {
       console.error(
@@ -317,4 +320,57 @@ export class UsersService {
 
     return youtubeData;
   }
+  async getUserStats(userId: number) {
+    const battles = await this.battleRepo.find({
+      where: [
+        { thumbnailA: { creator: { id: userId } } },
+        { thumbnailB: { creator: { id: userId } } },
+      ],
+      relations: [
+        'thumbnailA', 'thumbnailA.creator',
+        'thumbnailB', 'thumbnailB.creator',
+        'votes', // 💡 Votes are preloaded here
+      ],
+    });
+  
+    let totalVotes = 0;
+    let totalWins = 0;
+    let totalLosses = 0;
+    let totalBattles = battles.length;
+  
+    for (const battle of battles) {
+      const votesA = battle.votes.filter(
+        (v) => v.votedFor.id === battle.thumbnailA.creator.id,
+      ).length;
+  
+      const votesB = battle.votes.filter(
+        (v) => v.votedFor.id === battle?.thumbnailB?.creator?.id,
+      ).length;
+  
+      totalVotes += votesA + votesB;
+  
+      const isUserA = battle?.thumbnailA?.creator?.id === userId;
+      const isUserB = battle?.thumbnailB?.creator?.id === userId;
+  
+      const userVotes = isUserA ? votesA : isUserB ? votesB : 0;
+      const opponentVotes = isUserA ? votesB : isUserB ? votesA : 0;
+  
+      if (userVotes > opponentVotes) totalWins++;
+      else if (userVotes < opponentVotes) totalLosses++;
+      // Draws are ignored
+    }
+  
+    const winRate = totalBattles > 0 ? (totalWins / totalBattles) * 100 : 0;
+  
+    return {
+      userId,
+      totalBattles,
+      totalVotes,
+      totalWins,
+      totalLosses,
+      winRate: Math.round(winRate),
+    };
+  }
+
+  
 }

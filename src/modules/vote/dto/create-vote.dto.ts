@@ -1,9 +1,12 @@
-import { IsEnum, IsInt } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, IsIn } from "class-validator"
 
 export class CreateVoteDto {
-    @IsInt()
-    battleId: number;
+  @IsNotEmpty()
+  @IsNumber()
+  battleId: number
 
-    @IsEnum(['A', 'B'])
-    votedFor: 'A' | 'B';
+  @IsNotEmpty()
+  @IsString()
+  @IsIn(["A", "B"])
+  votedFor: "A" | "B" // Changed to 'A' or 'B' as per the provided VoteService snippet
 }

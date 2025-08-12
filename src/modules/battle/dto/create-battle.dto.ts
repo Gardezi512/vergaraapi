@@ -1,15 +1,20 @@
-import { IsInt } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional } from "class-validator"
 
 export class CreateBattleDto {
   @IsInt()
-  thumbnailAId: number;
+  @IsNotEmpty()
+  thumbnailAId: number
+
+ 
+  @IsInt()
+  @IsOptional() // Made optional for bye battles
+  thumbnailBId?: number // Optional for bye battles
 
   @IsInt()
-  thumbnailBId: number;
+  @IsNotEmpty()
+  tournamentId: number
 
   @IsInt()
-  tournamentId: number;
-
-  @IsInt()
-  roundNumber: number;
+  @IsNotEmpty()
+  roundNumber: number
 }

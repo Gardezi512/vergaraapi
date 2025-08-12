@@ -1,0 +1,90 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from '../../auth/entities/user.entity';
+import { APTransactionType, ArenaPointsTransaction } from '../entities/arena-points-transaction.entity';
+
+
+@Injectable()
+export class ArenaPointsService {
+  private readonly logger = new Logger(ArenaPointsService.name);
+
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+    @InjectRepository(ArenaPointsTransaction)
+    private readonly apTransactionRepo: Repository<ArenaPointsTransaction>,
+  ) {}
+
+  async awardArenaPoints(
+    userId: number,
+    points: number,
+    type: APTransactionType,
+    description?: string,
+    tournamentId?: number,
+    battleId?: number,
+    roundNumber?: number,
+  ): Promise<void> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      return;
+    }
+    // ✅ Check if already awarded for this context
+  const existing= await this.apTransactionRepo.findOne({
+    where: {
+      user: { id: userId },
+      type,
+      tournamentId,
+      battleId,
+      roundNumber,
+    },
+  });
+
+  if (existing) {
+    this.logger.warn(
+      `Skipping AP award: User ${userId} already got points for ${type} (Battle ${battleId}, Round ${roundNumber}, Tournament ${tournamentId})`
+    );
+  
+    
+
+  }
+
+    // Update user's arena points
+    user.arenaPoints += points;
+    await this.userRepo.save(user);
+
+    // Create transaction record
+    const transaction = this.apTransactionRepo.create({
+      user,
+      points,
+      type,
+      description,
+      tournamentId,
+      battleId,
+      roundNumber,
+    });
+
+    await this.apTransactionRepo.save(transaction);
+  
+
+  }
+
+  async getArenaPointsConfig() {
+    return {
+      thumbnailSubmission: 5,
+      battleWin: 10,
+      roundCompletion: 25,
+      tournamentWin: 100,
+      tournamentSecondPlace: 50,
+      tournamentThirdPlace: 25,
+    };
+  }
+
+  async getUserArenaPointsHistory(userId: number): Promise<ArenaPointsTransaction[]> {
+    return this.apTransactionRepo.find({
+      where: { user: { id: userId } },
+      order: { createdAt: 'DESC' },
+      take: 50, // Last 50 transactions
+    });
+  }
+}

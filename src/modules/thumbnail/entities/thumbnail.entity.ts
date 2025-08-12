@@ -5,6 +5,7 @@ import {
     ManyToOne,
     CreateDateColumn,
     UpdateDateColumn,
+    JoinColumn,
 } from 'typeorm';
 import { User } from 'src/modules/auth/entities/user.entity';
 import { Tournament } from 'src/modules/tournament/entities/tournament.entity';
@@ -34,9 +35,18 @@ export class Thumbnail {
 
     @Column({ nullable: true })
     title?: string;
+    
 
-    @ManyToOne(() => Tournament, { nullable: false, onDelete: 'CASCADE' })
-    tournament: Tournament;
+    @ManyToOne(
+        () => Tournament,
+        (tournament) => tournament.thumbnails, // FIX: Corrected inverse side mapping
+        { onDelete: "CASCADE" },
+      )
+      @JoinColumn({ name: 'tournamentId' })
+tournament: Tournament;
+
+@Column()
+tournamentId: number;
 
     @CreateDateColumn()
     createdAt: Date;

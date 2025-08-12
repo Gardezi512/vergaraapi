@@ -7,9 +7,20 @@ import {
   UpdateDateColumn,
   JoinTable,
   ManyToMany,
+  OneToMany,
+  JoinColumn,
 } from 'typeorm';
 import { Community } from 'src/modules/community/entities/community.entity';
 import { User } from 'src/modules/auth/entities/user.entity';
+import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
+
+
+export enum TournamentStatus {
+  PENDING = "pending",
+  ACTIVE = "active",
+  CONCLUDED = "concluded",
+  CANCELLED = "cancelled",
+}
 
 export interface BattleRound {
   roundNumber: number;
@@ -91,9 +102,26 @@ export class Tournament {
 
   @Column({ type: 'int', nullable: true })
   maxParticipants?: number;
+  @OneToMany(
+    () => Thumbnail,
+    (thumbnail) => thumbnail.tournament, // Added the inverse side for Thumbnail
+    {
+      cascade: false,
+      eager: true,
+    },
+  )
+  thumbnails: Thumbnail[]
 
-  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
-  createdBy: User;
+  @ManyToOne(() => User, { nullable: false, onDelete: "CASCADE" })
+  @JoinColumn({ name: "createdById" }) 
+  createdBy: User
+
+  @Column({
+    type: "enum",
+    enum: TournamentStatus,
+    default: TournamentStatus.PENDING, // Tournament status defaults to PENDING
+  })
+  status: TournamentStatus
 
   @CreateDateColumn()
   createdAt: Date;
