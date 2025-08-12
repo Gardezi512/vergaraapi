@@ -446,75 +446,171 @@ export class TournamentService {
     this.logger.log('--- Tournament Deletion Check Complete ---');
   }
 
+  // async joinTournament(
+  //   tournamentId: number,
+  //   user: User,
+  //   youtubeAccessToken: string,
+  //   thumbnailUrl: string,
+  // ): Promise<{ message: string; thumbnail: Thumbnail }> {
+  //   // Basic validations (unchanged)
+  //   const baseTournament = await this.tournamentRepo.findOne({
+  //     where: { id: tournamentId },
+  //     relations: ['participants'],
+  //   });
+  //   if (!baseTournament) throw new NotFoundException('Tournament not found');
+  //   if (
+  //     [TournamentStatus.CANCELLED, TournamentStatus.CONCLUDED].includes(
+  //       baseTournament.status,
+  //     )
+  //   ) {
+  //     throw new BadRequestException('This tournament cannot be joined.');
+  //   }
+  //   const now = new Date();
+  //   if (isBefore(now, new Date(baseTournament.startDate))) {
+  //     throw new BadRequestException('Tournament has not started yet.');
+  //   }
+  //   if (
+  //     baseTournament.registrationDeadline &&
+  //     isAfter(now, new Date(baseTournament.registrationDeadline))
+  //   ) {
+  //     throw new BadRequestException(
+  //       'Registration for this tournament has closed.',
+  //     );
+  //   }
+  //   if (
+  //     baseTournament.maxParticipants &&
+  //     baseTournament.participants.length >= baseTournament.maxParticipants
+  //   ) {
+  //     throw new BadRequestException('This tournament is full.');
+  //   }
+  //   if (baseTournament.accessType === 'invite-only')
+  //     throw new ForbiddenException('Invite-only tournament.');
+  //   if (baseTournament.accessType === 'restricted') {
+  //     const criteria = baseTournament.accessCriteria;
+  //     const youtubeData =
+  //       await this.authService.fetchYouTubeChannelData(youtubeAccessToken);
+  //     if (!youtubeData)
+  //       throw new BadRequestException('Unable to fetch YouTube data.');
+  //     const subscribers = parseInt(youtubeData.subscribers || '0', 10);
+  //     const arenaPoints = user.arenaPoints ?? 0;
+  //     const elo = user.elo ?? 0;
+  //     if (criteria?.minSubscribers && subscribers < criteria.minSubscribers) {
+  //       throw new BadRequestException(
+  //         `You need at least ${criteria.minSubscribers} subscribers.`,
+  //       );
+  //     }
+  //     if (criteria?.minArenaPoints && arenaPoints < criteria.minArenaPoints) {
+  //       throw new BadRequestException(
+  //         `You need at least ${criteria.minArenaPoints} arena points.`,
+  //       );
+  //     }
+  //     if (criteria?.minElo && elo < criteria.minElo) {
+  //       throw new BadRequestException(
+  //         `You need at least ${criteria.minElo} ELO.`,
+  //       );
+  //     }
+  //   }
+
+  //   // URL validation + normalization (unchanged)
+  //   if (!thumbnailUrl || thumbnailUrl.trim() === '') {
+  //     throw new BadRequestException('A thumbnail URL is required.');
+  //   }
+  //   const isYouTubeUrl =
+  //     /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//.test(thumbnailUrl);
+  //   const isImageUrl = /\.(jpeg|jpg|gif|png|webp)$/.test(thumbnailUrl);
+  //   if (!isYouTubeUrl && !isImageUrl)
+  //     throw new BadRequestException('Invalid thumbnail URL.');
+  //   let finalImageUrl = thumbnailUrl;
+  //   if (isYouTubeUrl) {
+  //     const videoId = this.extractYouTubeVideoId(thumbnailUrl);
+  //     if (!videoId)
+  //       throw new BadRequestException('Invalid YouTube URL format.');
+  //     finalImageUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+  //   }
+
+  //   // All DB writes in ONE transaction with the SAME manager
+  //   return this.dataSource.transaction(async (m) => {
+  //     const tRepo = m.getRepository(Tournament);
+  //     const thumbRepo = m.getRepository(Thumbnail);
+
+  //     // Reload tournament inside TX (with participants)
+  //     const tournament = await tRepo.findOne({
+  //       where: { id: tournamentId },
+  //       relations: ['participants'],
+  //     });
+  //     if (!tournament) throw new NotFoundException('Tournament not found');
+
+  //     // If user already joined, return existing thumbnail
+  //     const alreadyJoined = tournament.participants?.some(
+  //       (p) => p.id === user.id,
+  //     );
+  //     if (alreadyJoined) {
+  //       const existingThumb = await thumbRepo.findOne({
+  //         where: {
+  //           creator: { id: user.id },
+  //           tournament: { id: tournament.id },
+  //         },
+  //         relations: ['creator', 'tournament'],
+  //       });
+  //       if (!existingThumb)
+  //         throw new BadRequestException(
+  //           'You already joined, but your thumbnail is missing.',
+  //         );
+  //       return {
+  //         message: 'You have already joined this tournament!',
+  //         thumbnail: existingThumb,
+  //       };
+  //     }
+
+  //     // Ensure no duplicate thumbnail for this user in this tournament (race-safe)
+  //     const duplicate = await thumbRepo.findOne({
+  //       where: { tournament: { id: tournament.id }, creator: { id: user.id } },
+  //     });
+  //     if (duplicate)
+  //       throw new BadRequestException(
+  //         'You already uploaded a thumbnail for this tournament.',
+  //       );
+
+  //     // 1) Create & SAVE thumbnail FIRST (prevents later saves from nulling FK)
+  //     const thumbnail = thumbRepo.create({
+  //       imageUrl: finalImageUrl,
+  //       title: `Thumbnail for ${user.username || user.email}`,
+  //       creator: { id: user.id } as User,
+  //       tournamentId: tournament.id,
+  //       tournament: { id: tournament.id } as Tournament,
+        
+  //     });
+  //     await thumbRepo.save(thumbnail);
+
+  //     // 2) Add participant and SAVE tournament (participants array may be undefined)
+  //     tournament.participants = [
+  //       ...(tournament.participants || []),
+  //       { id: user.id } as User,
+  //     ];
+  //     await tRepo.save(tournament);
+
+  //     // // 3) Reload thumbnail with relations to return a rich object
+  //     // const fullThumbnail = await thumbRepo.findOne({
+  //     //   where: { id: savedThumbnail.id },
+  //     //   relations: ['creator', 'tournament'],
+  //     // });
+
+  //     return {
+  //       message: 'You have successfully joined the tournament!',
+  //       thumbnail: thumbnail!,
+  //     };
+  //   });
+  // }
   async joinTournament(
     tournamentId: number,
     user: User,
     youtubeAccessToken: string,
     thumbnailUrl: string,
   ): Promise<{ message: string; thumbnail: Thumbnail }> {
-    // Basic validations (unchanged)
-    const baseTournament = await this.tournamentRepo.findOne({
-      where: { id: tournamentId },
-      relations: ['participants'],
-    });
-    if (!baseTournament) throw new NotFoundException('Tournament not found');
-    if (
-      [TournamentStatus.CANCELLED, TournamentStatus.CONCLUDED].includes(
-        baseTournament.status,
-      )
-    ) {
-      throw new BadRequestException('This tournament cannot be joined.');
-    }
-    const now = new Date();
-    if (isBefore(now, new Date(baseTournament.startDate))) {
-      throw new BadRequestException('Tournament has not started yet.');
-    }
-    if (
-      baseTournament.registrationDeadline &&
-      isAfter(now, new Date(baseTournament.registrationDeadline))
-    ) {
-      throw new BadRequestException(
-        'Registration for this tournament has closed.',
-      );
-    }
-    if (
-      baseTournament.maxParticipants &&
-      baseTournament.participants.length >= baseTournament.maxParticipants
-    ) {
-      throw new BadRequestException('This tournament is full.');
-    }
-    if (baseTournament.accessType === 'invite-only')
-      throw new ForbiddenException('Invite-only tournament.');
-    if (baseTournament.accessType === 'restricted') {
-      const criteria = baseTournament.accessCriteria;
-      const youtubeData =
-        await this.authService.fetchYouTubeChannelData(youtubeAccessToken);
-      if (!youtubeData)
-        throw new BadRequestException('Unable to fetch YouTube data.');
-      const subscribers = parseInt(youtubeData.subscribers || '0', 10);
-      const arenaPoints = user.arenaPoints ?? 0;
-      const elo = user.elo ?? 0;
-      if (criteria?.minSubscribers && subscribers < criteria.minSubscribers) {
-        throw new BadRequestException(
-          `You need at least ${criteria.minSubscribers} subscribers.`,
-        );
-      }
-      if (criteria?.minArenaPoints && arenaPoints < criteria.minArenaPoints) {
-        throw new BadRequestException(
-          `You need at least ${criteria.minArenaPoints} arena points.`,
-        );
-      }
-      if (criteria?.minElo && elo < criteria.minElo) {
-        throw new BadRequestException(
-          `You need at least ${criteria.minElo} ELO.`,
-        );
-      }
-    }
-
-    // URL validation + normalization (unchanged)
-    if (!thumbnailUrl || thumbnailUrl.trim() === '') {
+    // validate basic inputs BEFORE transaction (lightweight checks ok)
+    if (!thumbnailUrl || thumbnailUrl.trim() === '')
       throw new BadRequestException('A thumbnail URL is required.');
-    }
+  
     const isYouTubeUrl =
       /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//.test(thumbnailUrl);
     const isImageUrl = /\.(jpeg|jpg|gif|png|webp)$/.test(thumbnailUrl);
@@ -523,83 +619,131 @@ export class TournamentService {
     let finalImageUrl = thumbnailUrl;
     if (isYouTubeUrl) {
       const videoId = this.extractYouTubeVideoId(thumbnailUrl);
-      if (!videoId)
-        throw new BadRequestException('Invalid YouTube URL format.');
+      if (!videoId) throw new BadRequestException('Invalid YouTube URL format.');
       finalImageUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     }
+  
+    return await this.dataSource.transaction(async (manager) => {
+      const tRepo = manager.getRepository(Tournament);
+      const thumbRepo = manager.getRepository(Thumbnail);
+  
+      // 1) Load tournament with a row lock (prevents racing on the tournament row)
+    // 1) Load tournament with a row lock, without any joined relations
+const tournament = await manager
+.getRepository(Tournament)
+.createQueryBuilder('t')
+.where('t.id = :id', { id: tournamentId })
+.setLock('pessimistic_write')
+.getOne();
 
-    // All DB writes in ONE transaction with the SAME manager
-    return this.dataSource.transaction(async (m) => {
-      const tRepo = m.getRepository(Tournament);
-      const thumbRepo = m.getRepository(Thumbnail);
-
-      // Reload tournament inside TX (with participants)
-      const tournament = await tRepo.findOne({
-        where: { id: tournamentId },
-        relations: ['participants'],
-      });
-      if (!tournament) throw new NotFoundException('Tournament not found');
-
-      // If user already joined, return existing thumbnail
-      const alreadyJoined = tournament.participants?.some(
-        (p) => p.id === user.id,
-      );
-      if (alreadyJoined) {
+if (!tournament) throw new NotFoundException('Tournament not found');
+  
+      // 2) Re-check tournament state inside TX (status, dates, capacity, access)
+      if ([TournamentStatus.CANCELLED, TournamentStatus.CONCLUDED].includes(tournament.status))
+        throw new BadRequestException('This tournament cannot be joined.');
+  
+      const now = new Date();
+      if (isBefore(now, new Date(tournament.startDate))) {
+        throw new BadRequestException('Tournament has not started yet.');
+      }
+      if (tournament.registrationDeadline && isAfter(now, new Date(tournament.registrationDeadline))) {
+        throw new BadRequestException('Registration for this tournament has closed.');
+      }
+      if (tournament.maxParticipants && tournament.maxParticipants <= 0) {
+        // optional: handle misconfigured tournaments
+        throw new BadRequestException('Tournament not accepting participants.');
+      }
+  
+      // If restricted -> validate youtube token etc (do this inside TX for safety if you want)
+      if (tournament.accessType === 'restricted') {
+        const criteria = tournament.accessCriteria;
+        const youtubeData = await this.authService.fetchYouTubeChannelData(youtubeAccessToken);
+        if (!youtubeData) throw new BadRequestException('Unable to fetch YouTube data.');
+        const subscribers = parseInt(youtubeData.subscribers || '0', 10);
+        const arenaPoints = user.arenaPoints ?? 0;
+        const elo = user.elo ?? 0;
+        if (criteria?.minSubscribers && subscribers < criteria.minSubscribers) {
+          throw new BadRequestException(`You need at least ${criteria.minSubscribers} subscribers.`);
+        }
+        if (criteria?.minArenaPoints && arenaPoints < criteria.minArenaPoints) {
+          throw new BadRequestException(`You need at least ${criteria.minArenaPoints} arena points.`);
+        }
+        if (criteria?.minElo && elo < criteria.minElo) {
+          throw new BadRequestException(`You need at least ${criteria.minElo} ELO.`);
+        }
+      }
+  
+      // 3) Check if user is already a participant (without loading tournament.thumbnails)
+      // Use a small query: left join participants and test membership
+      const alreadyJoinedCheck = await tRepo
+        .createQueryBuilder('t')
+        .leftJoin('t.participants', 'p')
+        .where('t.id = :tId', { tId: tournament.id })
+        .andWhere('p.id = :uId', { uId: user.id })
+        .getOne();
+      if (alreadyJoinedCheck) {
+        // Fetch user's thumbnail for the tournament and return it
         const existingThumb = await thumbRepo.findOne({
-          where: {
-            creator: { id: user.id },
-            tournament: { id: tournament.id },
-          },
+          where: { tournament: { id: tournament.id }, creator: { id: user.id } },
           relations: ['creator', 'tournament'],
         });
-        if (!existingThumb)
-          throw new BadRequestException(
-            'You already joined, but your thumbnail is missing.',
-          );
-        return {
-          message: 'You have already joined this tournament!',
-          thumbnail: existingThumb,
-        };
+        if (!existingThumb) throw new BadRequestException('You already joined, but your thumbnail is missing.');
+        return { message: 'You have already joined this tournament!', thumbnail: existingThumb };
       }
-
-      // Ensure no duplicate thumbnail for this user in this tournament (race-safe)
+  
+      // Optional: Check maxParticipants count by querying participants count
+      if (tournament.maxParticipants) {
+        const participantsCount = await tRepo
+          .createQueryBuilder('t')
+          .leftJoin('t.participants', 'p')
+          .where('t.id = :tId', { tId: tournament.id })
+          .select('COUNT(p.id)', 'count')
+          .getRawOne();
+        const count = parseInt((participantsCount?.count ?? '0').toString(), 10);
+        if (count >= tournament.maxParticipants) {
+          throw new BadRequestException('This tournament is full.');
+        }
+      }
+  
+      // 4) Ensure no existing thumbnail for this user & tournament
       const duplicate = await thumbRepo.findOne({
         where: { tournament: { id: tournament.id }, creator: { id: user.id } },
       });
-      if (duplicate)
-        throw new BadRequestException(
-          'You already uploaded a thumbnail for this tournament.',
-        );
-
-      // 1) Create & SAVE thumbnail FIRST (prevents later saves from nulling FK)
-      const thumbnail = thumbRepo.create({
+      if (duplicate) throw new BadRequestException('You already uploaded a thumbnail for this tournament.');
+  
+      // 5) Create & SAVE thumbnail — set BOTH tournamentId and tournament relation object + creatorId
+      //    Use explicit FKs so there's no ambiguity, and include relation object to prevent later overwrite.
+      const thumbnailToSave = thumbRepo.create({
         imageUrl: finalImageUrl,
         title: `Thumbnail for ${user.username || user.email}`,
+        // explicit FK fields (these must exist on your entity; if not, use creator: {id: user.id}, tournament: {id: tournament.id})
         creator: { id: user.id } as User,
         tournament: { id: tournament.id } as Tournament,
         tournamentId: tournament.id,
       });
-      const savedThumbnail = await thumbRepo.save(thumbnail);
-
-      // 2) Add participant and SAVE tournament (participants array may be undefined)
-      tournament.participants = [
-        ...(tournament.participants || []),
-        { id: user.id } as User,
-      ];
-      await tRepo.save(tournament);
-
-      // 3) Reload thumbnail with relations to return a rich object
+  
+      const savedThumbnail = await thumbRepo.save(thumbnailToSave);
+  
+      // 6) Add the user to participants using relation API to update junction table directly
+      //    This avoids re-saving tournament entity which can cause unwanted side-effects.
+      await manager.createQueryBuilder()
+        .relation(Tournament, 'participants')
+        .of(tournament.id)
+        .add(user.id);
+  
+      // 7) Re-load the thumbnail with relations to return a rich object
       const fullThumbnail = await thumbRepo.findOne({
         where: { id: savedThumbnail.id },
         relations: ['creator', 'tournament'],
       });
-
+  
       return {
         message: 'You have successfully joined the tournament!',
         thumbnail: fullThumbnail!,
       };
     });
   }
+  
 
   private extractYouTubeVideoId(url: string): string | null {
     const match = url.match(
