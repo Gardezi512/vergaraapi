@@ -34,7 +34,7 @@ export class BattleService {
   ) {}
 
   async create(dto: CreateBattleDto, user: User): Promise<Battle> {
-    this.logger.log(`Attempting to create battle: ${JSON.stringify(dto)}`);
+
 
     const thumbnailA = await this.thumbnailRepo.findOne({
       where: { id: dto.thumbnailAId },
@@ -188,9 +188,7 @@ export class BattleService {
     }
 
     if (!battle.thumbnailB) {
-      this.logger.error(
-        `Cannot resolve votes for battle ${battleId}: Thumbnail B is missing for a non-bye battle.`,
-      );
+    
       throw new BadRequestException(
         'Cannot resolve votes for a battle without a second thumbnail.',
       );
@@ -487,9 +485,7 @@ export class BattleService {
       (r) => r.roundNumber === currentRound + 1,
     );
     if (!nextRound) {
-      this.logger.warn(
-        `Next round (Round #${currentRound + 1}) not found for tournament ${tournamentId}.`,
-      );
+    
       throw new BadRequestException('Next round not found');
     }
 
@@ -544,9 +540,6 @@ export class BattleService {
       );
     }
 
-    this.logger.log(
-      `Finished generating ${battlesToCreate.length} battles (including byes) for next round.`,
-    );
     return this.battleRepo.save(battlesToCreate);
   }
 

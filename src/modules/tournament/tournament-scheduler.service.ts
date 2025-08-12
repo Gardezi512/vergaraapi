@@ -35,7 +35,6 @@ export class TournamentSchedulerService {
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async handleTournamentStart() {
-    this.logger.debug('Running tournament start check...');
     const tournaments = await this.tournamentService.findAll();
     const now = new Date();
 
@@ -81,17 +80,12 @@ export class TournamentSchedulerService {
         firstRoundStartDate &&
         (isAfter(now, firstRoundStartDate) || isEqual(now, firstRoundStartDate)) // First round should start
       ) {
-        this.logger.log(
-          `[Scheduler] Processing tournament: ${tournament.title} (ID: ${tournament.id}) for start.`,
-        );
-
+      
         // Check for minimum participants after registration deadline
         if (
           tournament.participants.length < this.MIN_PARTICIPANTS_FOR_TOURNAMENT
         ) {
-          this.logger.warn(
-            `[Scheduler] Tournament ${tournament.id} cancelled: Insufficient participants (${tournament.participants.length} < ${this.MIN_PARTICIPANTS_FOR_TOURNAMENT}).`,
-          );
+    
           await this.tournamentService.updateTournamentStatus(
             tournament.id,
             TournamentStatus.CANCELLED,
@@ -115,12 +109,6 @@ if (!systemUser) {
   
         if (existingBattlesCount === 0) {
           try {
-            this.logger.log(
-              `[Scheduler] System user placeholder (${systemUser.id}) found for battle generation.`,
-            );
-            this.logger.log(
-              `[Scheduler] Generating battles for Round 1 of tournament ${tournament.id}`,
-            );
           const generatedBattles =
               await this.battleService.generateRandomBattlesForRound(
                 tournament.id,
@@ -136,36 +124,25 @@ if (!systemUser) {
                 tournament.id,
                 TournamentStatus.ACTIVE,
               );
-              this.logger.log(
-                `[Scheduler] Tournament ${tournament.id} status set to ACTIVE.`,
-              );
+            
             } else {
               // This case should ideally not happen if MIN_PARTICIPANTS_FOR_TOURNAMENT passes
               // but as a fallback, if no battles are generated for Round 1, conclude.
-              this.logger.warn(
-                `[Scheduler] No battles generated for Round 1 of tournament ${tournament.id} despite sufficient participants. Concluding tournament.`,
-              );
+        
               await this.tournamentService.updateTournamentStatus(
                 tournament.id,
                 TournamentStatus.CONCLUDED,
               );
-              this.logger.log(
-                `[Scheduler] Tournament ${tournament.id} status set to CONCLUDED.`,
-              );
+    
             }
           } catch (error) {
-            this.logger.error(
-              `[Scheduler] Error generating battles for tournament ${tournament.id}: ${error.message}`,
-              error.stack,
-            );
+    
             // Optionally, set tournament status to ERROR or CANCELLED if battle generation fails
             await this.tournamentService.updateTournamentStatus(
               tournament.id,
               TournamentStatus.CANCELLED,
             );
-            this.logger.log(
-              `[Scheduler] Tournament ${tournament.id} status set to CANCELLED due to error.`,
-            );
+        
           }
         } else {
           this.logger.log(
@@ -192,36 +169,11 @@ if (!systemUser) {
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async handleRoundAdvancement() {
-    this.logger.debug('Running round advancement check...');
     const activeTournaments = (await this.tournamentService.findAll()).filter(
       (t) => t.status === TournamentStatus.ACTIVE,
     );
     const now = new Date();
 
-    // Define a placeholder system user for battle creation
-    // const systemUser: User = {
-    //   id: 0,
-    //   username: 'System',
-    //   email: 'system@example.com',
-    //   role: 'Admin',
-    //   name: 'System User',
-    //   joinedCommunities: [],
-    //   password: '',
-    //   createdAt: new Date(),
-    //   updatedAt: new Date(),
-    //   arenaPoints: 0,
-    //   elo: 0,
-    //   winCount: 0, // 🎯 ADD THIS
-    //   lossCount: 0, // 🎯 ADD THIS
-    //   battleCount: 0, // 🎯 ADD THIS
-    //   tournamentWins: 0, // 🎯 ADD THIS
-    //   youtubeProfile: undefined,
-    //   thumbnails: [], // 🎯 ADD THIS
-    //   votes: [], // 🎯 ADD THIS
-    //   tournaments: [], // 🎯 ADD THIS (if you have this relation)
-    //   arenaPointsTransactions: [], // 🎯 ADD THIS
-    //   rewards: [], // 🎯 ADD THIS
-    // } as User;
 
     for (const tournament of activeTournaments) {
       // 🎯 ADD: Safety check for tournament rounds
@@ -239,9 +191,6 @@ if (!systemUser) {
       );
 
       if (currentRound) {
-        this.logger.log(
-          `[Scheduler] Round ${currentRound.roundNumber} of tournament ${tournament.id} has ended.`,
-        );
 
         // Force resolution of any unresolved battles in the current round
         const battlesInCurrentRound =
@@ -254,14 +203,10 @@ if (!systemUser) {
             battle.status === BattleStatus.PENDING ||
             battle.status === BattleStatus.ACTIVE
           ) {
-            this.logger.log(
-              `[Scheduler] Forcing resolution for battle ${battle.id} in Round ${currentRound.roundNumber}.`,
-            );
+      
             try {
               await this.battleService.resolveWinnerFromVotes(battle.id);
-              this.logger.log(
-                `[Scheduler] Battle ${battle.id} resolved successfully.`,
-              );
+    
             } catch (resolveError) {
               this.logger.error(
                 `[Scheduler] Error resolving battle ${battle.id}: ${resolveError.message}`,
@@ -282,16 +227,9 @@ if (!systemUser) {
             tournament.id,
             currentRound.roundNumber,
           );
-
-        this.logger.log(
-          `[Scheduler] Round ${currentRound.roundNumber} of tournament ${tournament.id}: Total battles: ${totalBattlesInRound}, Completed battles: ${completedBattlesInRound}.`,
-        );
-
         // Check if all battles in the current round are completed
         if (totalBattlesInRound !== completedBattlesInRound) {
-          this.logger.warn(
-            `[Scheduler] Round ${currentRound.roundNumber} of tournament ${tournament.id} has unresolved battles (${totalBattlesInRound - completedBattlesInRound} remaining). Skipping advancement.`,
-          );
+  
           continue; // Do not advance if battles are unresolved
         }
 
@@ -303,10 +241,6 @@ if (!systemUser) {
           );
           const currentRoundConfig = tournament.rounds?.find(
             (r) => r.roundNumber === currentRound.roundNumber,
-          );
-
-          this.logger.log(
-            `[Scheduler] Found ${roundWinners.length} winners for round ${currentRound.roundNumber}`,
           );
 
           // Award arena points for round completion
@@ -336,9 +270,7 @@ if (!systemUser) {
               tournament.id,
               currentRound.roundNumber,
             );
-            this.logger.log(
-              `[Scheduler] Awarded round rewards to ${roundWinners.length} winners`,
-            );
+          
           }
         } catch (rewardError) {
           this.logger.error(
@@ -365,9 +297,7 @@ if (!systemUser) {
             continue;
           }
 
-          this.logger.log(
-            `[Scheduler] Next round (${nextRoundNumber}) defined for tournament ${tournament.id}.`,
-          );
+         
           // Check if battles for the next round already exist (idempotency)
           const existingNextRoundBattlesCount =
             await this.battleService.countBattlesForRound(
@@ -386,12 +316,7 @@ if (!systemUser) {
 }
           if (existingNextRoundBattlesCount === 0) {
             try {
-              this.logger.log(
-                `[Scheduler] System user placeholder (${systemUser.id}) found for next round battle generation.`,
-              );
-              this.logger.log(
-                `[Scheduler] Generating battles for Round ${nextRoundNumber} of tournament ${tournament.id}`,
-              );
+            
               const generatedBattles =
                 await this.battleService.generateNextRoundBattles(
                   tournament.id,
@@ -400,11 +325,9 @@ if (!systemUser) {
                 );
               // If no battles generated for the next round (e.g., only one winner)
               if (generatedBattles.length === 0) {
-                this.logger.log(
-                  `[Scheduler] No battles generated for Round ${nextRoundNumber} of tournament ${tournament.id}. Concluding tournament.`,
-                );
+            
 
-                // 🎯 NEW: Award tournament winner rewards (SAFE VERSION)
+                //  Award tournament winner rewards (SAFE VERSION)
                 try {
                   const tournamentWinners =
                     await this.battleService.getWinnersOfRound(
@@ -431,9 +354,6 @@ if (!systemUser) {
                       );
                     }
 
-                    this.logger.log(
-                      `[Scheduler] Tournament ${tournament.id} winner: ${champion.username || champion.name}`,
-                    );
                   }
                 } catch (winnerRewardError) {
                   this.logger.error(
@@ -446,9 +366,7 @@ if (!systemUser) {
                   tournament.id,
                   TournamentStatus.CONCLUDED,
                 );
-                this.logger.log(
-                  `[Scheduler] Tournament ${tournament.id} status set to CONCLUDED.`,
-                );
+               
               } else {
                 this.logger.log(
                   `[Scheduler] Successfully generated ${generatedBattles.length} battles for Round ${nextRoundNumber} of tournament ${tournament.id}.`,
@@ -464,9 +382,7 @@ if (!systemUser) {
                 tournament.id,
                 TournamentStatus.CANCELLED,
               );
-              this.logger.log(
-                `[Scheduler] Tournament ${tournament.id} status set to CANCELLED due to error in next round generation.`,
-              );
+        
             }
           } else {
             this.logger.log(
@@ -518,9 +434,7 @@ if (!systemUser) {
                   );
                 }
 
-                this.logger.log(
-                  `[Scheduler] Tournament ${tournament.id} winner: ${champion.username || champion.name}`,
-                );
+                
               } else {
                 this.logger.warn(
                   `[Scheduler] Expected 1 tournament winner, found ${tournamentWinners.length}`,

@@ -27,7 +27,6 @@ export class ArenaPointsService {
   ): Promise<void> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) {
-      this.logger.error(`User ${userId} not found for arena points award`);
       return;
     }
     // ✅ Check if already awarded for this context
@@ -68,9 +67,6 @@ export class ArenaPointsService {
     await this.apTransactionRepo.save(transaction);
   
 
-    this.logger.log(
-      `Awarded ${points} AP to user ${user.username || user.name} for ${type}. New total: ${user.arenaPoints}`
-    );
   }
 
   async getArenaPointsConfig() {

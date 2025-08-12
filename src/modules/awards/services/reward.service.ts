@@ -32,9 +32,6 @@ export class RewardService {
 
     await this.userRewardRepo.save(reward);
 
-    this.logger.log(
-      `Awarded ${rewardType} "${rewardName}" to user ${user.username || user.name} for tournament ${tournamentId}`
-    );
   }
 
   async awardRoundRewards(
