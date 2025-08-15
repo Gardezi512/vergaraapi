@@ -1068,7 +1068,7 @@ if (!tournament) throw new NotFoundException('Tournament not found');
       startDate: tournament.startDate,
       endDate: tournament.endDate,
       format: tournament.format,
-      structure: tournament.structure,
+      structure: tournament.structure, 
       category: tournament.category,
       subcategory: tournament.subcategory,
       accessType: tournament.accessType,
