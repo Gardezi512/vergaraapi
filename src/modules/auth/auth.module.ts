@@ -13,7 +13,7 @@ import { Battle } from '../battle/entities/battle.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, YouTubeProfile,Battle]),
+    TypeOrmModule.forFeature([User, YouTubeProfile,Battle ]),
     PassportModule,
     ConfigModule,
     JwtModule.registerAsync({

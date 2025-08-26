@@ -572,153 +572,214 @@ export class BattleService {
     return map;
   }
 
-  async getAllBattles(userId?: number) {
-    const battles = await this.battleRepo.find({
-      relations: {
-        thumbnailA: { creator: { youtubeProfile: true } },
-        thumbnailB: { creator: { youtubeProfile: true } },
-        tournament: true,
+
+async getAllBattles(userId?: number) {
+
+
+  const battles = await this.battleRepo.find({
+    relations: {
+      thumbnailA: { creator: { youtubeProfile: true } },
+      thumbnailB: { creator: { youtubeProfile: true } },
+      tournament: true,
+    },
+    order: { createdAt: "ASC" },
+  })
+
+  if (!battles?.length) {
+    return { liveBattles: [], completedBattles: [] }
+  }
+
+  const battleIds = battles.map((b) => b.id)
+
+  // 1) Round counts (tournamentId + roundNumber => number of battles)
+  const roundCountsRaw = await this.battleRepo
+    .createQueryBuilder("battle")
+    .select("battle.tournamentId", "tournamentId")
+    .addSelect("battle.roundNumber", "roundNumber")
+    .addSelect("COUNT(*)", "count")
+    .where("battle.id IN (:...battleIds)", { battleIds })
+    .groupBy("battle.tournamentId")
+    .addGroupBy("battle.roundNumber")
+    .getRawMany()
+
+  const roundCountsMap = new Map<string, number>()
+  for (const r of roundCountsRaw) {
+    const key = `${r.tournamentId}:${r.roundNumber}`
+    roundCountsMap.set(key, Number(r.count))
+  }
+
+  // 2) Vote counts grouped by battleId and votedFor (votedFor is thumbnail id, not user id)
+  const voteCountsRaw = await this.voteRepo
+    .createQueryBuilder("vote")
+    .select("vote.battleId", "battleId")
+    .addSelect("vote.votedForId", "votedForId") // This is thumbnail ID
+    .addSelect("COUNT(*)", "count")
+    .where("vote.battleId IN (:...battleIds)", { battleIds })
+    .groupBy("vote.battleId")
+    .addGroupBy("vote.votedForId")
+    .getRawMany()
+
+  // countsMap[battleId] = { [thumbnailId]: count }
+  const countsMap: Record<number, Record<number, number>> = {}
+  for (const row of voteCountsRaw) {
+    const bId = Number(row.battleId)
+    const thumbnailId = Number(row.votedForId) // This is thumbnail ID
+    const cnt = Number(row.count)
+    countsMap[bId] = countsMap[bId] || {}
+    countsMap[bId][thumbnailId] = cnt
+  }
+
+  // 3) User's votes across these battles - using proper relations and logging
+  let userVotes: Vote[] = []
+  if (userId) {
+
+
+    userVotes = await this.voteRepo.find({
+      where: {
+        voter: { id: userId },
+        battle: { id: In(battleIds) },
       },
-      order: { createdAt: 'ASC' },
-    });
+      relations: ["votedFor", "battle", "voter"],
+    })
 
-    const enrichedBattles: any[] = [];
-    for (const battle of battles) {
-      const roundInfo = battle.tournament.rounds?.find(
-        (r) => r.roundNumber === battle.roundNumber,
-      );
-      if (!roundInfo) {
-        this.logger.warn(
-          `No round info found for battle ${battle.id}. Skipping enrichment.`,
-        );
-        continue;
+   
+    userVotes.forEach((vote) => {
+ 
+    })
+  } else {
+ 
+  }
+
+  // 4) Build helper map for battles in same round to compute index
+  const battlesByRound = new Map<string, number[]>() // key -> list of battle ids in original order
+  for (const b of battles) {
+    const key = `${b.tournament.id}:${b.roundNumber}`
+    if (!battlesByRound.has(key)) battlesByRound.set(key, [])
+    battlesByRound.get(key)!.push(b.id)
+  }
+
+  const enrichedBattles = battles.map((battle) => {
+    // safe guards
+    const hasB = !!battle.thumbnailB
+    const thumbnailAId = battle.thumbnailA?.id
+    const thumbnailBId = battle.thumbnailB?.id
+
+    // votes (from grouped counts) - now using thumbnail IDs
+    const countsFor = countsMap[battle.id] || {}
+    const votesA = thumbnailAId ? countsFor[thumbnailAId] || 0 : 0
+    const votesB = thumbnailBId ? countsFor[thumbnailBId] || 0 : 0
+    const totalVotes = votesA + votesB
+    const winRateA = totalVotes > 0 ? Math.round((votesA / totalVotes) * 100) : 50
+    const winRateB = 100 - winRateA
+
+    // user's vote for this battle (if any)
+    const userVote = userVotes.find((uv) => uv.battle.id === battle.id) || null
+
+
+    let votedFor: "A" | "B" | null = null
+    let votedForThumbnailId: number | null = null
+
+    if (userVote) {
+      votedForThumbnailId = userVote.votedFor.id
+
+      if (votedForThumbnailId === battle.thumbnailA?.id) {
+        votedFor = "A"
+      } else if (hasB && votedForThumbnailId === battle.thumbnailB?.id) {
+        votedFor = "B"
       }
 
-      const roundStart = new Date(roundInfo.roundStartDate);
-      const roundEnd = new Date(roundInfo.roundEndDate);
-
-      // Count battles for the current round to accurately calculate timePerBattle
-      const roundBattleCount = await this.battleRepo.count({
-        where: {
-          tournament: { id: battle.tournament.id },
-          roundNumber: battle.roundNumber,
-        },
-      });
-
-      const hasVoted = userId
-        ? !!(await this.voteRepo.findOne({
-            where: {
-              battle: { id: battle.id }, // assuming `battle` is the object, not just id
-              voter: { id: userId },
-            },
-          }))
-        : false;
-      const vote = userId
-        ? await this.voteService.getUserVoteForBattle(battle.id, userId)
-        : null;
-
-      const battlesInThisRound = battles.filter(
-        (b) =>
-          b.tournament.id === battle.tournament.id &&
-          b.roundNumber === battle.roundNumber,
-      );
-      const battleIndex = battlesInThisRound.findIndex(
-        (b) => b.id === battle.id,
-      );
-
-      const totalDuration = roundEnd.getTime() - roundStart.getTime();
-      const timePerBattle = totalDuration / roundBattleCount;
-
-      const startTime = new Date(
-        roundStart.getTime() + timePerBattle * battleIndex,
-      );
-      const endTime = new Date(startTime.getTime() + timePerBattle);
-      const now = new Date();
-      const isLive =
-        now >= startTime &&
-        now < endTime &&
-        battle.status === BattleStatus.PENDING; // Only live if pending
-
-      let votesA = 0;
-      let votesB = 0;
-      let winRateA = 0;
-      let winRateB = 0;
-
-      if (!battle.isByeBattle && battle.thumbnailB) {
-        const voteStats = await this.voteService.getBattleVoteStats(
-          battle.id,
-          battle.thumbnailA.creator.id,
-          battle.thumbnailB.creator.id,
-        );
-        votesA = voteStats.votesA;
-        votesB = voteStats.votesB;
-        winRateA = voteStats.winRateA;
-        winRateB = voteStats.winRateB;
-      } else if (battle.isByeBattle) {
-        winRateA = 100; // Bye participant automatically wins
-        winRateB = 0; // No opponent, so 0% win rate for B
-      }
-
-      enrichedBattles.push({
-        id: battle.id,
-        roundNumber: battle.roundNumber,
-        tournament: {
-          id: battle.tournament.id,
-          title: battle.tournament.title,
-          category: battle.tournament.category,
-        },
-        endTime: endTime.toISOString(),
-        isLive: isLive,
-        voteInfo: vote
-          ? {
-              userHasVoted: true,
-              votedFor: vote.votedFor, // or vote.votedFor.id, etc.
-            }
-          : {
-              userHasVoted: false,
-              votedFor: null,
-            },
-        thumbnailA: {
-          id: battle.thumbnailA.id,
-          imageUrl: battle.thumbnailA.imageUrl,
-          title: battle.thumbnailA.title || 'Untitled',
-          arenaPoints: battle.thumbnailA.creator.arenaPoints || 0,
-          winRate: winRateA,
-          votes: votesA,
-          creator: {
-            username:
-              battle.thumbnailA.creator.username ||
-              battle.thumbnailA.creator.name,
-            avatar: battle.thumbnailA.creator.youtubeProfile?.thumbnail || null,
-          },
-        },
-        thumbnailB: battle.thumbnailB
-          ? {
-              id: battle.thumbnailB.id,
-              imageUrl: battle.thumbnailB.imageUrl,
-              title: battle.thumbnailB.title || 'Untitled',
-              arenaPoints: battle.thumbnailB.creator.arenaPoints || 0,
-              winRate: winRateB,
-              votes: votesB,
-              creator: {
-                username:
-                  battle.thumbnailB.creator.username ||
-                  battle.thumbnailB.creator.name,
-                avatar:
-                  battle.thumbnailB.creator.youtubeProfile?.thumbnail || null,
-              },
-            }
-          : null,
-        isByeBattle: battle.isByeBattle,
-        status: battle.status, // Include battle status
-      });
     }
 
+    // compute round time windows (use round info stored on tournament)
+    const roundInfo = battle.tournament.rounds?.find((r) => r.roundNumber === battle.roundNumber)
+    const now = new Date()
+    let isLive = false
+    let endTimeIso = ""
+
+    if (roundInfo) {
+      const roundStart = new Date(roundInfo.roundStartDate)
+      const roundEnd = new Date(roundInfo.roundEndDate)
+      const roundKey = `${battle.tournament.id}:${battle.roundNumber}`
+      const roundCount = roundCountsMap.get(roundKey) || battlesByRound.get(roundKey)?.length || 1
+      const safeRoundCount = Math.max(1, roundCount)
+      const totalDuration = roundEnd.getTime() - roundStart.getTime()
+      const timePerBattle = safeRoundCount > 0 ? totalDuration / safeRoundCount : 0
+
+      const battlesInRound = battlesByRound.get(roundKey) || []
+      const indexInRound = battlesInRound.findIndex((id) => id === battle.id)
+
+      const startTime = new Date(roundStart.getTime() + timePerBattle * indexInRound)
+      const endTime = new Date(startTime.getTime() + timePerBattle)
+      endTimeIso = endTime.toISOString()
+
+      const isInTimeWindow = now >= startTime && now < endTime
+      const isPending = battle.status === BattleStatus.PENDING
+      isLive = isInTimeWindow && isPending
+     
+    }
+
+    const voteInfo = {
+      userHasVoted: !!userVote,
+      votedFor, // 'A' | 'B' | null
+      votedForThumbnailId, // the thumbnail the user voted for
+      votesA,
+      votesB,
+      winRateA,
+      winRateB,
+    }
     return {
-      liveBattles: enrichedBattles.filter((b) => b.isLive),
-      completedBattles: enrichedBattles.filter((b) => !b.isLive),
-    };
+      id: battle.id,
+      roundNumber: battle.roundNumber,
+      tournament: {
+        id: battle.tournament.id,
+        title: battle.tournament.title,
+        category: battle.tournament.category,
+      },
+      endTime: endTimeIso,
+      isLive,
+      voteInfo,
+      thumbnailA: {
+        id: battle.thumbnailA.id,
+        imageUrl: battle.thumbnailA.imageUrl,
+        title: battle.thumbnailA.title || "Untitled",
+        arenaPoints: battle.thumbnailA.creator?.arenaPoints || 0,
+        winRate: winRateA,
+        votes: votesA,
+        creator: {
+          id: battle.thumbnailA.creator?.id,
+          username: battle.thumbnailA.creator?.username || battle.thumbnailA.creator?.name,
+          avatar: battle.thumbnailA.creator?.youtubeProfile?.thumbnail || null,
+        },
+      },
+      thumbnailB: battle.thumbnailB
+        ? {
+            id: battle.thumbnailB.id,
+            imageUrl: battle.thumbnailB.imageUrl,
+            title: battle.thumbnailB.title || "Untitled",
+            arenaPoints: battle.thumbnailB.creator?.arenaPoints || 0,
+            winRate: winRateB,
+            votes: votesB,
+            creator: {
+              id: battle.thumbnailB.creator?.id,
+              username: battle.thumbnailB.creator?.username || battle.thumbnailB.creator?.name,
+              avatar: battle.thumbnailB.creator?.youtubeProfile?.thumbnail || null,
+            },
+          }
+        : null,
+      isByeBattle: battle.isByeBattle,
+      status: battle.status,
+    }
+  })
+
+  const liveBattles = enrichedBattles.filter((b) => b.isLive)
+  const completedBattles = enrichedBattles.filter((b) => !b.isLive)
+
+  return {
+    liveBattles,
+    completedBattles,
   }
+}
+
 
   /**
    * Counts the number of battles for a specific tournament and round.
@@ -739,13 +800,7 @@ export class BattleService {
     });
   }
 
-  /**
-   * Counts the number of COMPLETED battles for a specific tournament and round.
-   * A battle is considered completed if it has a winnerUser.
-   * @param tournamentId The ID of the tournament.
-   * @param roundNumber The round number.
-   * @returns The count of completed battles.
-   */
+
   async countCompletedBattlesForRound(
     tournamentId: number,
     roundNumber: number,
@@ -760,12 +815,6 @@ export class BattleService {
     });
   }
 
-  /**
-   * Retrieves all battles for a specific tournament and round.
-   * @param tournamentId The ID of the tournament.
-   * @param roundNumber The round number.
-   * @returns An array of battles.
-   */
   async getBattlesForRound(
     tournamentId: number,
     roundNumber: number,

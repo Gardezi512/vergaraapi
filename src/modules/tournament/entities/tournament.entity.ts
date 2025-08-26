@@ -38,6 +38,7 @@ export interface BattleRound {
   roundEndDate: Date;
   requirements?: string;
   numParticipants?: number;
+  rewardsDistributed?: boolean // <-- ADD THIS FLAG
 }
 
 @Entity()

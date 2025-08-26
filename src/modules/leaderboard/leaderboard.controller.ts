@@ -1,14 +1,19 @@
 import { Controller, Get, Param } from "@nestjs/common"
-import { LeaderboardService } from "./leaderboard.service"
+import {LeaderboardService } from "./leaderboard.service"
+
 
 @Controller("docs/leaderboard")
 export class LeaderboardController {
-  constructor(private readonly leaderboardService: LeaderboardService) {}
+  constructor(private readonly LeaderboardService: LeaderboardService) {}
 
   @Get()
-  async getLeaderboard(period = "all-time", category?: string, page = 1, limit = 20) {
+  async getLeaderboard(period = "all-time", page = 1, limit = 20) {
     try {
-      const data = await this.leaderboardService.getLeaderboardData(period, page, limit)
+      const data = await this.LeaderboardService.getLeaderboardData(
+        period as any,
+        Number(page),
+        Number(limit),
+      )
 
       return {
         status: true,
@@ -24,9 +29,9 @@ export class LeaderboardController {
   }
 
   @Get("progress/:userId")
-  async getUserProgress(@Param('userId') userId: number, period = "30d") {
+  async getUserProgress(@Param('userId') userId: string, period = "30d") {
     try {
-      const progressData = await this.leaderboardService.getUserProgress(userId, period)
+      const progressData = await this.LeaderboardService.getUserProgress(Number(userId), period as any)
 
       return {
         status: true,
@@ -36,7 +41,7 @@ export class LeaderboardController {
       return {
         status: false,
         message: "Failed to fetch user progress",
-        error: error.message,
+        error: error.message
       }
     }
   }

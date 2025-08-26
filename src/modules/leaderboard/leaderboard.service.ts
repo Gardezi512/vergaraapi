@@ -1,3 +1,4 @@
+
 import { Injectable } from "@nestjs/common"
 import type { Repository } from "typeorm"
 import { User } from "../auth/entities/user.entity"
@@ -102,6 +103,7 @@ export class LeaderboardService {
       return "0%"
     }
   }
+  
 
   async getPlatformStats() {
     try {
