@@ -6,6 +6,9 @@ import { Vote } from 'src/modules/vote/entities/vote.entity';
 import { YouTubeProfile } from 'src/modules/youtubeprofile/entities/youtube.profile.entity';
 import { ArenaPointsTransaction } from '../../awards/entities/arena-points-transaction.entity';
 import { UserReward } from '../../awards/entities/user-reward.entity';
+import { Subscription } from '../../subscription/entities/subscription.entity';
+import { CreditUsage } from '../../subscription/entities/token-usage.entity';
+import { MembershipType } from '../../subscription/entities/subscription.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -89,5 +92,21 @@ battleCount: number;
 
 @Column({ default: 0 })
 tournamentWins: number;
+
+// Subscription and credit fields
+@Column({ type: 'enum', enum: MembershipType, default: MembershipType.FREE })
+membershipType: MembershipType;
+
+@Column({ default: false })
+freeCreditsUsed: boolean; // true if user has used their 1 free credit
+
+@Column({ nullable: true })
+stripeCustomerId?: string;
+
+@OneToMany(() => Subscription, (subscription) => subscription.user)
+subscriptions: Subscription[];
+
+@OneToMany(() => CreditUsage, (creditUsage) => creditUsage.user)
+creditUsage: CreditUsage[];
   
 }

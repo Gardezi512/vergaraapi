@@ -197,23 +197,12 @@ export class TournamentSchedulerService {
       });
 
       if (currentRound) {
-        // Force resolution of any unresolved battles in the current round
-        const battlesInCurrentRound = await this.battleService.getBattlesForRound(
+        //  Process all pending battles in the round simultaneously
+        this.logger.log(`[Scheduler] Round ${currentRound.roundNumber} ended, processing all battles`);
+        await this.battleService.processAllPendingBattlesInRound(
           tournament.id,
-          currentRound.roundNumber,
-        )
-        for (const battle of battlesInCurrentRound) {
-          if (battle.status === BattleStatus.PENDING || battle.status === BattleStatus.ACTIVE) {
-            try {
-              await this.battleService.resolveWinnerFromVotes(battle.id)
-            } catch (resolveError) {
-              this.logger.error(
-                `[Scheduler] Error resolving battle ${battle.id}: ${resolveError.message}`,
-                resolveError.stack,
-              )
-            }
-          }
-        }
+          currentRound.roundNumber
+        );
 
         const totalBattlesInRound = await this.battleService.countBattlesForRound(
           tournament.id,
@@ -237,7 +226,9 @@ export class TournamentSchedulerService {
             // Award arena points for round completion
             if (currentRoundConfig?.rewards?.arenaPoints && roundWinners.length > 0) {
               for (const winner of roundWinners) {
-                const winnerBattle = battlesInCurrentRound.find((b) => b.winnerUser?.id === winner.user.id)
+                // Get the winner's battle for this round
+                const winnerBattle = await this.battleService.getBattlesForRound(tournament.id, currentRound.roundNumber)
+                  .then(battles => battles.find(b => b.winnerUser?.id === winner.user.id));
 
                 await this.arenaPointsService.awardArenaPoints(
                   winner.user.id,
@@ -354,6 +345,27 @@ export class TournamentSchedulerService {
 
           await this.tournamentService.updateTournamentStatus(tournament.id, TournamentStatus.CONCLUDED)
           this.logger.log(`[Scheduler] Tournament ${tournament.id} status set to CONCLUDED.`)
+        }
+      }
+      
+      //  Check if tournament should be concluded (all rounds completed)
+      if (!currentRound) {
+        // No current round found - check if all rounds are completed
+        const allRoundsCompleted = tournament.rounds.every(round => {
+          const roundEndDate = new Date(round.roundEndDate);
+          return isAfter(now, roundEndDate) || isEqual(now, roundEndDate);
+        });
+        
+        if (allRoundsCompleted) {
+          this.logger.log(`[Scheduler] All rounds completed for tournament ${tournament.id}, concluding tournament`);
+          
+          // Get the final round number for winner rewards
+          const finalRoundNumber = Math.max(...tournament.rounds.map(r => r.roundNumber));
+          
+          await this.awardTournamentWinnerRewards(tournament, finalRoundNumber);
+          await this.tournamentService.updateTournamentStatus(tournament.id, TournamentStatus.CONCLUDED);
+          
+          this.logger.log(`[Scheduler] Tournament ${tournament.id} concluded successfully`);
         }
       }
     }
