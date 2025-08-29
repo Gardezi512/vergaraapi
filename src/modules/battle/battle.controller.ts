@@ -59,11 +59,11 @@ export class BattleController {
     );
     return { status: true, data: instanceToPlain(battles) };
   }
-
-  // ✅ PUBLIC: Get all battles of all tournaments
-  @Get()
-async getAllBattles(@Query('userId') userId?: number) {
-  const battles = await this.battleService.getAllBattles(userId);
+  
+@UseGuards(JwtAuthGuard)
+@Get()
+async getAllBattles(@Request() req: { user: User }) {
+  const battles = await this.battleService.getAllBattles(req.user.id);
   return { status: true, data: instanceToPlain(battles) };
 }
 }

@@ -18,12 +18,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
                 entities: [__dirname + '/../**/*.entity.{js,ts}'],
                 retryAttempts: 1,
                 autoLoadEntities: true,
-                synchronize: true,
+                // synchronize: true,
+                synchronize:false,
                 // ssl: true,
                 // logging: true,
-                ssl: {
-                    rejectUnauthorized: false,
-                },
+                // ssl: {
+                //     rejectUnauthorized: false,
+                // },
+                ssl:false,
                 cache: true,
             }),
         }),

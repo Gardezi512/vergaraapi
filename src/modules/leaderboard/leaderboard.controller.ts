@@ -1,45 +1,48 @@
-import { Controller, Get, Query } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from 'src/modules/auth/entities/user.entity';
-import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
+import { Controller, Get, Param } from "@nestjs/common"
+import {LeaderboardService } from "./leaderboard.service"
 
-@Controller('docs/leaderboard')
+
+@Controller("docs/leaderboard")
 export class LeaderboardController {
-    constructor(
-        @InjectRepository(User)
-        private readonly userRepo: Repository<User>,
+  constructor(private readonly LeaderboardService: LeaderboardService) {}
 
-        @InjectRepository(Thumbnail)
-        private readonly thumbnailRepo: Repository<Thumbnail>,
-    ) { }
+  @Get()
+  async getLeaderboard(period = "all-time", page = 1, limit = 20) {
+    try {
+      const data = await this.LeaderboardService.getLeaderboardData(
+        period as any,
+        Number(page),
+        Number(limit),
+      )
 
-    @Get()
-    async getLeaderboard(
-        @Query('type') type?: 'elo' | 'arena',
-        @Query('tournamentId') tournamentId?: number,
-    ) {
-        const results: any = {};
-
-        // Arena Points Leaderboard
-        if (!type || type === 'arena') {
-            results.arena = await this.userRepo.find({
-                order: { arenaPoints: 'DESC' },
-                take: 20,
-            });
-        }
-
-        // ELO Leaderboard (optionally by tournament)
-        if (!type || type === 'elo') {
-            const where = tournamentId ? { tournament: { id: tournamentId } } : {};
-            results.elo = await this.thumbnailRepo.find({
-                where,
-                order: { eloRating: 'DESC' },
-                take: 20,
-                relations: ['creator', 'tournament'],
-            });
-        }
-
-        return { status: true, data: results };
+      return {
+        status: true,
+        data,
+      }
+    } catch (error) {
+      return {
+        status: false,
+        message: "Failed to fetch leaderboard",
+        error: error.message,
+      }
     }
+  }
+
+  @Get("progress/:userId")
+  async getUserProgress(@Param('userId') userId: string, period = "30d") {
+    try {
+      const progressData = await this.LeaderboardService.getUserProgress(Number(userId), period as any)
+
+      return {
+        status: true,
+        data: progressData,
+      }
+    } catch (error) {
+      return {
+        status: false,
+        message: "Failed to fetch user progress",
+        error: error.message
+      }
+    }
+  }
 }

@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { User } from 'src/modules/auth/entities/user.entity';
 import { Battle } from 'src/modules/battle/entities/battle.entity';
+import { Thumbnail } from 'src/modules/thumbnail/entities/thumbnail.entity';
 
 @Entity("votes")
 @Unique(["voter", "battle"]) // One vote per user per battle
@@ -32,11 +33,11 @@ export class Vote {
 
   // "A" or "B" (corresponding to thumbnailA or thumbnailB)
   @ManyToOne(
-    () => User, // This is the user whose thumbnail was voted for
+    () => Thumbnail,
     { eager: true, nullable: false, onDelete: "CASCADE" },
   )
-  votedFor: User
-
+  votedFor: Thumbnail
+  
   @CreateDateColumn()
   createdAt: Date
 

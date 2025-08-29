@@ -15,6 +15,7 @@ import {
   
   @Entity('user_rewards')
   export class UserReward {
+    [x: string]: any;
     @PrimaryGeneratedColumn()
     id: number;
   
