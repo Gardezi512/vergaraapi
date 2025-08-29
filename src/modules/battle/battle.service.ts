@@ -699,23 +699,14 @@ async getAllBattles(userId?: number) {
     if (roundInfo) {
       const roundStart = new Date(roundInfo.roundStartDate)
       const roundEnd = new Date(roundInfo.roundEndDate)
-      const roundKey = `${battle.tournament.id}:${battle.roundNumber}`
-      const roundCount = roundCountsMap.get(roundKey) || battlesByRound.get(roundKey)?.length || 1
-      const safeRoundCount = Math.max(1, roundCount)
-      const totalDuration = roundEnd.getTime() - roundStart.getTime()
-      const timePerBattle = safeRoundCount > 0 ? totalDuration / safeRoundCount : 0
-
-      const battlesInRound = battlesByRound.get(roundKey) || []
-      const indexInRound = battlesInRound.findIndex((id) => id === battle.id)
-
-      const startTime = new Date(roundStart.getTime() + timePerBattle * indexInRound)
-      const endTime = new Date(startTime.getTime() + timePerBattle)
-      endTimeIso = endTime.toISOString()
-
-      const isInTimeWindow = now >= startTime && now < endTime
+      
+      //  All battles are live during the entire round duration
+      const isRoundActive = now >= roundStart && now <= roundEnd
       const isPending = battle.status === BattleStatus.PENDING
-      isLive = isInTimeWindow && isPending
-     
+      
+      // A battle is live if the round is active and battle is pending
+      isLive = isRoundActive && isPending
+      endTimeIso = roundEnd.toISOString() // All battles end when round ends
     }
 
     const voteInfo = {
@@ -781,12 +772,7 @@ async getAllBattles(userId?: number) {
 }
 
 
-  /**
-   * Counts the number of battles for a specific tournament and round.
-   * @param tournamentId The ID of the tournament.
-   * @param roundNumber The round number.
-   * @returns The count of battles.
-   */
+
   async countBattlesForRound(
     tournamentId: number,
     roundNumber: number,
@@ -827,5 +813,38 @@ async getAllBattles(userId?: number) {
       },
       relations: ['thumbnailA', 'thumbnailB', 'winnerUser', 'votes'],
     });
+  }
+
+  //  Process all pending battles when round ends
+  async processAllPendingBattlesInRound(tournamentId: number, roundNumber: number): Promise<void> {
+    this.logger.log(`Processing all pending battles in tournament ${tournamentId}, round ${roundNumber}`);
+    
+    const battlesInRound = await this.getBattlesForRound(tournamentId, roundNumber);
+    
+    for (const battle of battlesInRound) {
+      if (battle.status === BattleStatus.PENDING) {
+        try {
+          // Check if battle has votes to resolve
+          const voteCount = await this.voteRepo.count({
+            where: { battle: { id: battle.id } }
+          });
+          
+          if (voteCount > 0) {
+            this.logger.log(`Resolving battle ${battle.id} with ${voteCount} votes`);
+            await this.resolveWinnerFromVotes(battle.id);
+          } else {
+            this.logger.log(`Battle ${battle.id} has no votes, marking as completed`);
+            // If no votes, mark as completed (this handles edge cases)
+            await this.battleRepo.update(battle.id, { 
+              status: BattleStatus.COMPLETED 
+            });
+          }
+        } catch (error) {
+          this.logger.error(`Error processing battle ${battle.id}: ${error.message}`);
+        }
+      }
+    }
+    
+    this.logger.log(`Finished processing battles in tournament ${tournamentId}, round ${roundNumber}`);
   }
 }

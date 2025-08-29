@@ -16,7 +16,8 @@ import { HomeService } from './modules/home/home.service';
 import { Tournament } from './modules/tournament/entities/tournament.entity';
 import { User } from './modules/auth/entities/user.entity';
 import { Vote } from './modules/vote/entities/vote.entity';
-import { CreatorModule } from "./modules/creator-community/creator.module"
+import { CreatorModule } from "./modules/creator-community/creator.module";
+import { SubscriptionModule } from './modules/subscription/subscription.module';
 
 @Module({
   imports: [
@@ -29,7 +30,8 @@ import { CreatorModule } from "./modules/creator-community/creator.module"
     CommunityModule,
     TournamentModule,
     AwardsModule,
-    ThumbnailModule, BattleModule, LeaderboardModule,CreatorModule,
+    ThumbnailModule, BattleModule, LeaderboardModule, CreatorModule,
+    SubscriptionModule,
     TypeOrmModule.forFeature([Tournament, User, Vote]),
   ],
   
